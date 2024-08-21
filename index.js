@@ -28,6 +28,21 @@ const ingameHttpsServerOptions = {
 };
 const ingameHttpsServer = https.createServer(ingameHttpsServerOptions);
 
+function parseSocketIOMessage(message) {
+    try {
+        // Remove the leading "42" and parse the rest of the message as JSON
+        const jsonData = JSON.parse(message.slice(2));
+
+        // Extract the event name and data from the parsed JSON
+        const eventName = jsonData[0];
+        const eventData = jsonData[1];
+
+        return { eventName, eventData };
+    } catch {
+        return null;
+    }
+}
+
 const sizes = {
     "Uint32": 32,
     "Int32": 32,
@@ -42,6 +57,7 @@ const sizes = {
     "VectorUint8": 16,
     "CompressedString": -1
 };
+
 
 function swapEndianness16(val) {
     return ((val & 0xFF) << 8) | ((val >> 8) & 0xFF);
@@ -135,8 +151,8 @@ wss.on("connection", (ws) => {
     let enterWorldResponse;
 
     console.log(`wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`);
-    const gameServer = new WebSocket(`wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`);
-    // gameServer.binaryType = "arraybuffer";
+    let gameServer = new WebSocket(`wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`);
+    gameServer.binaryType = "arraybuffer";
     gameServer.on("open", () => {
         console.log("Game server connected");
         gameServer.send([7, 0]);
@@ -189,7 +205,6 @@ wss.on("connection", (ws) => {
                 break;
             case 9:
                 const rpcBytes = cryptRpc(payload, rpcKey);
-                console.log(rpcBytes);
                 // console.log("Incoming decrypted PACKET_RPC:", rpcBytes);
                 const reader = new BinaryReader(rpcBytes);
 
@@ -301,12 +316,12 @@ wss.on("connection", (ws) => {
     // Handle connection close
     ws.on("close", () => {
         console.log("Client disconnected from ingame");
-        gameServer.close(); // Close the connection to the game server when client disconnects
+        gameServer.close();
     });
 
     gameServer.on("close", () => {
         console.log("Game server connection closed");
-        ws.close(); // Close the connection to the ingame client when game server disconnects
+        ws.close();
     });
 });
 
@@ -316,7 +331,7 @@ ingameHttpsServer.listen(
     process.env.INGAME_HOST || "localhost",
     () => {
         console.log(
-            `[${process.env.INGAME_SERVER_NAME || "ZRPS"
+            `[${process.env.INGAME_SERVER_NAME || "ZRProxy Ingame"
             }] Ingame is now listening on port ${process.env.INGAME_PORT || "3003"}`
         );
     }
@@ -327,21 +342,6 @@ const server = http.createServer();
 
 // Create a Socket.io server instance
 const io = new Socketio(server, { path: "/gateway" });
-
-function parseSocketIOMessage(message) {
-    try {
-        // Remove the leading "42" and parse the rest of the message as JSON
-        const jsonData = JSON.parse(message.slice(2));
-
-        // Extract the event name and data from the parsed JSON
-        const eventName = jsonData[0];
-        const eventData = jsonData[1];
-
-        return { eventName, eventData };
-    } catch {
-        return null;
-    }
-}
 
 // Set up a listener for the connection event
 io.on("connection", (socket) => {
@@ -409,14 +409,14 @@ io.on("connection", (socket) => {
     socket.on("disconnect", () => {
         console.log("Socket.IO client disconnected");
         if (mason.readyState === WebSocket.OPEN) {
-            // mason.close();
+            mason.close();
         }
     });
 
     // Handle the target WebSocket server closing
     mason.on("close", () => {
         console.log("Target server connection closed");
-        // socket.disconnect(true);
+        socket.disconnect(true);
     });
 });
 
@@ -426,7 +426,8 @@ server.listen(
     process.env.MASON_HOST || "localhost",
     () => {
         console.log(
-            `[${process.env.MASON_SERVER_NAME || "ZRPS"}] Mason is now listening on port ${process.env.MASON_PORT || "3002"}`
+            `[${process.env.MASON_SERVER_NAME || "ZRProxy Mason"
+            }] Mason is now listening on port ${process.env.MASON_PORT || "3002"}`
         );
     }
 );
