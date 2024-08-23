@@ -43,6 +43,21 @@ function parseSocketIOMessage(message) {
     }
 }
 
+const types = {
+    "0": "Uint32",
+    "1": "Int32",
+    "2": "Float",
+    "3": "String",
+    "4": "Uint64",
+    "5": "Int64",
+    "6": "Uint16",
+    "7": "Int16",
+    "8": "Int8",
+    "9": "Uint8",
+    "10": "VectorUint8",
+    "11": "CompressedString"
+};
+
 const sizes = {
     "Uint32": 32,
     "Int32": 32,
@@ -58,6 +73,32 @@ const sizes = {
     "CompressedString": -1
 };
 
+const inputRpc = {
+    "tick": { id: 875692126, type: "Uint32", value: 0, key: 0xCCED0979 },
+    "inputUid": { id: 614051422, type: "Uint32", value: 0, key: 0x2B95FFFE },
+    "acknowledgedTickNumber": { id: 0, type: "Uint32", value: 0, key: 0 },
+    "isPing": { id: 1305702976, type: "Uint8", value: 0, key: 0xEE11EC24 },
+    "hasWorld": { id: 1311631272, type: "Uint8", value: 0, key: 0 },
+    "left": { id: 1857689874, type: "Int8", value: 0, key: 0x355EA990 },
+    "right": { id: 1725394323, type: "Int8", value: 0, key: 0x858984BB },
+    "down": { id: 361218246, type: "Int8", value: 0, key: 0xA2AB132B },
+    "up": { id: 365890172, type: "Int8", value: 0, key: 0x67768D9F },
+    "space": { id: 4223989018, type: "Int8", value: 0, key: 0x47B5D5F5 },
+    "moveDirection": { id: 3209116361, type: "Int16", value: 0, key: 0x2E10E1CE },
+    "use": { id: 2486061062, type: "Int8", value: 0, key: 0x6E0E6897 },
+    "worldX": { id: 3304954942, type: "Int32", value: 0, key: 0x90FFB48F },
+    "worldY": { id: 2881696461, type: "Int32", value: 0, key: 0xA947801E },
+    "distance": { id: 1473272673, type: "Uint32", value: 0, key: 0x8A0110F5 },
+    "yaw": { id: 3000823997, type: "Uint16", value: 0, key: 0x4441CB65 },
+    "mouseDown": { id: 2280622761, type: "Int16", value: 0, key: 0x721A5A92 },
+    "mouseMovedWhileDown": { id: 2981660673, type: "Int16", value: 0, key: 0x67CB001 },
+    "mouseMoved": { id: 1662839021, type: "Int16", value: 0, key: 0x3523121A },
+    "mouseUp": { id: 1035244158, type: "Int8", value: 0, key: 0x8B9A38CC },
+    "moveSpeed": { id: 3154201459, type: "Float", value: 0, key: 0xDDD131CD },
+    "rightMouseDown": { id: 3576311845, type: "Uint8", value: 0, key: 0x748822CC },
+    "unknown_0": { id: 1055678346, type: "Float", value: 0, key: 0x634D6BD7 },
+    "unknown_1": { id: 2802416676, type: "Float", value: 0, key: 0x5BCCB63A }
+};
 
 function swapEndianness16(val) {
     return ((val & 0xFF) << 8) | ((val >> 8) & 0xFF);
@@ -111,18 +152,45 @@ function getInputFieldKey(id) {
             return 0xEE11EC24;
         // case 1311631272:
         default:
-            return 0x0;
+            return 0;
     }
 }
 
-function decryptInputField(id, type, encrypted) {
-    let key = getInputFieldKey(id);
+function encryptInputField(type, originalValue, key) {
     const mask = (2 ** sizes[type] - 1);
+    let realKey = key;
+    // if (type === "Uint16" || type === "Int16") {
+    //     realKey = swapEndianness16(key);
+    // }
+
+    let value = originalValue;
+    switch (type) {
+        case "Float":
+            value = value * 100;
+            break;
+        case "Int16":
+            if (value < 32767) {
+                value = value + 65536;
+            }
+            break;
+        case "Int8":
+            if (value < 127) {
+                value = value + 256;
+            }
+            break;
+    }
+    let encrypted = (value ^ realKey) & mask;
+    return encrypted;
+}
+
+function decryptInputField(type, encrypted, key) {
+    const mask = (2 ** sizes[type] - 1);
+    let realKey = key;
     if (type === "Uint16" || type === "Int16") {
-        key = swapEndianness16(key);
+        realKey = swapEndianness16(key);
     }
 
-    let value = (encrypted ^ key) & mask;
+    let value = (encrypted ^ realKey) & mask;
     switch (type) {
         case "Float":
             value = value / 100;
@@ -139,6 +207,91 @@ function decryptInputField(id, type, encrypted) {
             break;
     }
     return value;
+}
+
+function craftInputRpc(inputRpc, enterWorldResponse, rpcKey) {
+    const rpcElement = enterWorldResponse.rpcs.find(
+        (rpc) => rpc.internalId === 0x3cb524ad
+    );
+    if (!rpcElement) return;
+    const index = rpcElement.index;
+    if (!index) return;
+    const parameters = rpcElement.parameters;
+    if (!parameters) return;
+    // console.log(parameters);
+
+    let input = inputRpc;
+
+    let size = 0;
+    for (const element of parameters) {
+        size += (sizes[types[element.type]] / 8);
+    }
+    
+    const writer = new BinaryWriter(size);
+    for (const element of parameters) {
+        const field = Object.entries(inputRpc).find(([key, value]) => value.id === element.id);
+        if (!field) {
+            writer.writeUint8(0);
+            console.log(element.id);
+            continue;
+        }
+        // console.log(field[1]);
+        let value = (field[1].value) >>> 0;
+        input[field[0]].value = value;
+        const key = getInputFieldKey(element.id);
+        value = encryptInputField(field[1].type, value, key);
+        // console.log("decrypted:", decryptInputField(field[1].type, value, key));
+        switch (element.type) {
+            case 0:
+                writer.writeUint32(value);
+                break;
+            case 1:
+                writer.writeInt32(value);
+                break;
+            case 2:
+                writer.writeFloat(value);
+                break;
+            case 3:
+                writer.writeString(value);
+                break;
+            case 4:
+                writer.writeUint64(value);
+                break;
+            case 5:
+                writer.writeInt64(value);
+                break;
+            case 6:
+                writer.writeUint16(value);
+                break;
+            case 7:
+                writer.writeInt16(value);
+                break;
+            case 8:
+                writer.writeUint8(value);
+                break;
+            case 9:
+                writer.writeInt8(value);
+                break;
+            case 10:
+                writer.writeUint8Vector2(value);
+                break;
+            case 11:
+                writer.writeString(value);
+                break;
+        }
+    }
+    const inputRpcParameters = new Uint8Array(writer.view.buffer);
+    // console.log(inputRpcParameters);
+    const body = new BinaryWriter(1 + 4 + inputRpcParameters.length);
+    body.writeUint8(9);
+    body.writeUint32(index);
+    body.writeUint8Array(inputRpcParameters);
+
+    const rpcBytes = new Uint8Array(body.view.buffer);
+    const outgoing = new Uint8Array(rpcBytes.length);
+    // console.log(rpcBytes);
+    outgoing.set(cryptRpc(rpcBytes, rpcKey));
+    return outgoing;
 }
 
 const wss = new WebSocketServer({ server: ingameHttpsServer });
@@ -205,7 +358,7 @@ wss.on("connection", (ws) => {
                 break;
             case 9:
                 const rpcBytes = cryptRpc(payload, rpcKey);
-                // console.log("Incoming decrypted PACKET_RPC:", rpcBytes);
+                console.log("Incoming decrypted PACKET_RPC:", rpcBytes);
                 const reader = new BinaryReader(rpcBytes);
 
                 // Read packet id to void it
@@ -218,67 +371,67 @@ wss.on("connection", (ws) => {
                 const parameters = rpcElement.parameters;
 
                 if (rpcElement.internalId !== 1018504365) break;
-                console.clear();
+                // console.clear();
+
+                let input = inputRpc;
+
                 for (const element of parameters) {
                     var buffer;
-                    var type;
+                    var type = types[element.type];
                     switch (element.type) {
                         case 0:
                             buffer = reader.readUint32();
-                            type = "Uint32";
                             break;
                         case 1:
                             buffer = reader.readInt32();
-                            type = "Int32";
                             break;
                         case 2:
                             buffer = reader.readFloat();
-                            type = "Float";
                             break;
                         case 3:
                             buffer = reader.readString();
-                            type = "String";
                             break;
                         case 4:
                             buffer = reader.readUint64();
-                            type = "Uint64";
                             break;
                         case 5:
                             buffer = reader.readInt64();
-                            type = "Int64";
                             break;
                         case 6:
                             buffer = reader.readUint16();
-                            type = "Uint16";
                             break;
                         case 7:
                             buffer = reader.readInt16();
-                            type = "Int16";
                             break;
                         case 8:
                             buffer = reader.readUint8();
-                            type = "Uint8";
                             break;
                         case 9:
                             buffer = reader.readInt8();
-                            type = "Int8";
                             break;
                         case 10:
                             buffer = reader.readUint8Vector2();
-                            type = "VectorUint8";
                             break;
                         case 11:
                             buffer = reader.readString();
-                            type = "CompressedString";
                             break;
                     }
                     let value = buffer >>> 0;
                     const encrypted = value;
-                    value = decryptInputField(element.id, type, value);
-
-                    console.log(`{ "type": "${type}", "id": ${element.id}, "encrypted": "0x${encrypted.toString(16).toUpperCase()}", "value": ${value} },`);
+                    const field = Object.entries(inputRpc).find(([key, value]) => value.id === element.id);
+                    // if (input[field[0]] == "inputUid") value = 0;
+                    input[field[0]].value = decryptInputField(type, encrypted, field[1].key);
+                    // console.log(`{ "type": "${type}", "id": ${element.id}, "encrypted": "0x${encrypted.toString(16).toUpperCase()}", "value": ${value} },`);
                 }
-                // console.log(rpcElement);
+                // console.log(input);
+                payload = craftInputRpc(input, enterWorldResponse, rpcKey);
+                console.log(message.buffer);
+                // console.log(Buffer.from(payload));
+                // console.log(message == Buffer.from(payload));
+                // console.log(Array.prototype.slice.call(message));
+                // console.log(Array.prototype.slice.call(payload));
+                // let b = Buffer.alloc(message.buffer.byteLength);
+                // let ab = b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
                 break;
             case 10:
                 console.log("Incoming PACKET_UDP_CONNECT:", payload);
@@ -586,38 +739,6 @@ function decodeEnterWorldResponse(payload) {
     return enterWorldResponse;
 }
 
-function indexOfUint8Array(array, target) {
-    for (let i = 0; i < array.length - target.length + 1; i++) {
-        if (array[i] === target[0]) {
-            let found = true;
-            for (let j = 1; j < target.length; j++) {
-                if (array[i + j] !== target[j]) {
-                    found = false;
-                    break;
-                }
-            }
-            if (found) {
-                return i;
-            }
-        }
-    }
-    return -1;
-}
-
-function insertUint8Array(array, target, insertion) {
-    const index = indexOfUint8Array(array, target);
-    if (index === -1) {
-        return array;
-    }
-
-    const newArray = new Uint8Array(array.length + insertion.length - target.length);
-    newArray.set(array.subarray(0, index), 0);
-    newArray.set(insertion, index);
-    newArray.set(array.subarray(index + target.length), index + insertion.length);
-
-    return newArray;
-}
-
 class EnterWorldRequest {
     constructor() {
         this.displayName = null;
@@ -787,7 +908,6 @@ class BinaryReader {
         return value;
     }
 
-
     readArrayInt32() {
         const length = this.readInt32();
         const result = new Array(length);
@@ -800,14 +920,6 @@ class BinaryReader {
     readArrayUint8() {
         const length = this.readUint8();
         const result = new Array(length);
-        for (let i = 0; i < length; i++) {
-            result[i] = this.readUint8();
-        }
-        return result;
-    }
-
-    readUint8Array(length) {
-        const result = new Uint8Array(length);
         for (let i = 0; i < length; i++) {
             result[i] = this.readUint8();
         }
@@ -843,7 +955,25 @@ class BinaryWriter {
         this.offset += 4;
     }
 
+    writeInt64(value) {
+        this.checkBufferSize(8);
+        this.view.setBigInt64(this.offset, value, true);
+        this.offset += 8;
+    }
+
     writeUint32(value) {
+        this.checkBufferSize(4);
+        this.view.setUint32(this.offset, value, true);
+        this.offset += 4;
+    }
+
+    writeUint64(value) {
+        this.checkBufferSize(8);
+        this.view.setBigUint64(this.offset, value, true);
+        this.offset += 8;
+    }
+
+    writeFloat(value) {
         this.checkBufferSize(4);
         this.view.setUint32(this.offset, value, true);
         this.offset += 4;
@@ -857,6 +987,11 @@ class BinaryWriter {
             this.view.setUint8(this.offset + i, value.charCodeAt(i));
         }
         this.offset += length;
+    }
+
+    writeUint8Vector2(vector) {
+        this.writeUint8(vector.x);
+        this.writeUint8(vector.y);
     }
 
     writeVector2(vector) {
