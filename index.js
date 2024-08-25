@@ -159,9 +159,9 @@ function getInputFieldKey(id) {
 function encryptInputField(type, originalValue, key) {
     const mask = (2 ** sizes[type] - 1);
     let realKey = key;
-    // if (type === "Uint16" || type === "Int16") {
-    //     realKey = swapEndianness16(key);
-    // }
+    if (type === "Uint16" || type === "Int16") {
+        realKey = swapEndianness16(key);
+    }
 
     let value = originalValue;
     switch (type) {
@@ -180,6 +180,12 @@ function encryptInputField(type, originalValue, key) {
             break;
     }
     let encrypted = (value ^ realKey) & mask;
+    if (type == "Int16") {
+        console.log(originalValue.toString(16).toUpperCase(), key.toString(16).toUpperCase(), encrypted.toString(16).toUpperCase());
+    }
+    if (type === "Uint16" || type === "Int16") {
+        encrypted = swapEndianness16(encrypted);
+    }
     return encrypted;
 }
 
@@ -237,6 +243,7 @@ function craftInputRpc(inputRpc, enterWorldResponse, rpcKey) {
         }
         // console.log(field[1]);
         let value = (field[1].value) >>> 0;
+        if (element.id == 614051422) value = 0;
         input[field[0]].value = value;
         const key = getInputFieldKey(element.id);
         value = encryptInputField(field[1].type, value, key);
@@ -289,7 +296,7 @@ function craftInputRpc(inputRpc, enterWorldResponse, rpcKey) {
 
     const rpcBytes = new Uint8Array(body.view.buffer);
     const outgoing = new Uint8Array(rpcBytes.length);
-    // console.log(rpcBytes);
+    console.log(rpcBytes);
     outgoing.set(cryptRpc(rpcBytes, rpcKey));
     return outgoing;
 }
@@ -331,7 +338,7 @@ wss.on("connection", (ws) => {
     ws.on("message", (message) => {
         // console.log("Client to server:", message);
 
-        var payload = new Uint8Array(message);
+        var payload = new Uint8Array(message, message.byteOffset, message.byteLength);
         switch (payload[0]) {
             case 0:
                 console.log("Incoming PACKET_ENTITY_UPDATE:", payload);
@@ -376,62 +383,73 @@ wss.on("connection", (ws) => {
                 let input = inputRpc;
 
                 for (const element of parameters) {
-                    var buffer;
+                    var data;
                     var type = types[element.type];
                     switch (element.type) {
                         case 0:
-                            buffer = reader.readUint32();
+                            data = reader.readUint32();
                             break;
                         case 1:
-                            buffer = reader.readInt32();
+                            data = reader.readInt32();
                             break;
                         case 2:
-                            buffer = reader.readFloat();
+                            data = reader.readFloat();
                             break;
                         case 3:
-                            buffer = reader.readString();
+                            data = reader.readString();
                             break;
                         case 4:
-                            buffer = reader.readUint64();
+                            data = reader.readUint64();
                             break;
                         case 5:
-                            buffer = reader.readInt64();
+                            data = reader.readInt64();
                             break;
                         case 6:
-                            buffer = reader.readUint16();
+                            data = reader.readUint16();
                             break;
                         case 7:
-                            buffer = reader.readInt16();
+                            data = reader.readInt16();
                             break;
                         case 8:
-                            buffer = reader.readUint8();
+                            data = reader.readUint8();
                             break;
                         case 9:
-                            buffer = reader.readInt8();
+                            data = reader.readInt8();
                             break;
                         case 10:
-                            buffer = reader.readUint8Vector2();
+                            data = reader.readUint8Vector2();
                             break;
                         case 11:
-                            buffer = reader.readString();
+                            data = reader.readString();
                             break;
                     }
-                    let value = buffer >>> 0;
+                    let value = data >>> 0;
                     const encrypted = value;
                     const field = Object.entries(inputRpc).find(([key, value]) => value.id === element.id);
                     // if (input[field[0]] == "inputUid") value = 0;
                     input[field[0]].value = decryptInputField(type, encrypted, field[1].key);
                     // console.log(`{ "type": "${type}", "id": ${element.id}, "encrypted": "0x${encrypted.toString(16).toUpperCase()}", "value": ${value} },`);
                 }
-                // console.log(input);
+                console.log(input);
+                console.log(rpcElement);
+                
+                console.log("message:", message, message.byteOffset, message.byteLength);
+                console.log("message buffer:", message.buffer);
+
                 payload = craftInputRpc(input, enterWorldResponse, rpcKey);
-                console.log(message.buffer);
-                // console.log(Buffer.from(payload));
-                // console.log(message == Buffer.from(payload));
-                // console.log(Array.prototype.slice.call(message));
-                // console.log(Array.prototype.slice.call(payload));
-                // let b = Buffer.alloc(message.buffer.byteLength);
-                // let ab = b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
+                console.log("payload:", payload);
+                console.log("payload buffer:", Buffer.from(payload));
+                
+                let buffer = Buffer.from(message.slice().buffer, message.byteOffset, message.byteLength);
+                buffer.set(Buffer.from(payload));
+                console.log("buffer:", buffer, buffer.byteOffset, buffer.byteLength);
+                console.log("buffer buffer:", buffer.buffer);
+
+                console.log(message == buffer);
+
+                // gameServer.send(new Uint8Array(message, message.byteOffset, message.byteLength));
+                gameServer.send(buffer);
+                return;
                 break;
             case 10:
                 console.log("Incoming PACKET_UDP_CONNECT:", payload);
@@ -555,7 +573,7 @@ io.on("connection", (socket) => {
     });
 
     mason.on("error", (err) => {
-        console.error("Target WebSocket error:", err);
+        console.error("Mason WebSocket error:", err);
     });
 
     // Handle the Socket.IO client disconnecting
@@ -568,7 +586,7 @@ io.on("connection", (socket) => {
 
     // Handle the target WebSocket server closing
     mason.on("close", () => {
-        console.log("Target server connection closed");
+        console.log("Mason server connection closed");
         socket.disconnect(true);
     });
 });
