@@ -243,7 +243,6 @@ function craftInputRpc(inputRpc, enterWorldResponse, rpcKey) {
         }
         // console.log(field[1]);
         let value = (field[1].value) >>> 0;
-        if (element.id == 614051422) value = 0;
         input[field[0]].value = value;
         const key = getInputFieldKey(element.id);
         value = encryptInputField(field[1].type, value, key);
