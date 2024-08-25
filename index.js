@@ -159,9 +159,9 @@ function getInputFieldKey(id) {
 function encryptInputField(type, originalValue, key) {
     const mask = (2 ** sizes[type] - 1);
     let realKey = key;
-    if (type === "Uint16" || type === "Int16") {
-        realKey = swapEndianness16(key);
-    }
+    // if (type === "Uint16" || type === "Int16") {
+    //     realKey = swapEndianness16(key);
+    // }
 
     let value = originalValue;
     switch (type) {
@@ -183,9 +183,9 @@ function encryptInputField(type, originalValue, key) {
     if (type == "Int16") {
         console.log(originalValue.toString(16).toUpperCase(), key.toString(16).toUpperCase(), encrypted.toString(16).toUpperCase());
     }
-    if (type === "Uint16" || type === "Int16") {
-        encrypted = swapEndianness16(encrypted);
-    }
+    // if (type === "Uint16" || type === "Int16") {
+    //     encrypted = swapEndianness16(encrypted);
+    // }
     return encrypted;
 }
 
@@ -211,6 +211,9 @@ function decryptInputField(type, encrypted, key) {
                 value = value - 256;
             }
             break;
+    }
+    if (type === "Uint16" || type === "Int16") {
+        value = swapEndianness16(value);
     }
     return value;
 }
