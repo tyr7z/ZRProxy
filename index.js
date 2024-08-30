@@ -853,7 +853,8 @@ class BinaryReader {
     }
 
     readFloat() {
-        const value = this.readUint32();
+        const value = this.view.getInt32(this.offset, true);
+        this.offset += 4;
         return value;
     }
 
@@ -995,7 +996,7 @@ class BinaryWriter {
 
     writeFloat(value) {
         this.checkBufferSize(4);
-        this.view.setUint32(this.offset, value, true);
+        this.view.setInt32(this.offset, value, true);
         this.offset += 4;
     }
 
