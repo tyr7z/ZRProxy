@@ -2,7 +2,7 @@
 import http from "http";
 import Socketio from "socket.io";
 import https from "https";
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 import { WebSocket, WebSocketServer } from "ws";
 import * as dotenv from "dotenv";
 
@@ -327,6 +327,7 @@ wss.on("connection", (ws) => {
         var payload = new Uint8Array(message);
         switch (payload[0]) {
             case 4:
+                writeFileSync("enterWorldResponse.txt", Array.from(payload).map(byte => "0x" + byte.toString(16).padStart(2, "0").toUpperCase()).join(", "));
                 enterWorldResponse = decodeEnterWorldResponse(payload);
                 console.log(enterWorldResponse);
                 break;
