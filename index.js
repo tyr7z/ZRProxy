@@ -325,8 +325,8 @@ wss.on("connection", (ws) => {
             case 0:
                 // console.clear();
                 console.log("Incoming PACKET_ENTITY_UPDATE:", payload);
-                var decodedString = decoder.decode(payload);
-                console.log(decodedString);
+                // var decodedString = decoder.decode(payload);
+                // console.log(decodedString);
                 break;
             case 4:
                 // writeFileSync("./tests/enterWorldResponse.dat", Array.from(payload).map(byte => "0x" + byte.toString(16).padStart(2, "0").toUpperCase()).join(", "));
@@ -340,10 +340,10 @@ wss.on("connection", (ws) => {
             case 9:
                 const rpcBytes = cryptRpc(payload, rpcKey);
                 console.log("Incoming decrypted PACKET_RPC:", rpcBytes);
-                const reader = new BinaryReader(rpcBytes);
-                var decodedString = decoder.decode(rpcBytes);
-                console.log(decodedString.substring(0, 20).replace(/\W/g, ''));
-                writeFileSync(`./shit/${decodedString.substring(0, 20).replace(/\W/g, '')}.txt`, Array.from(rpcBytes).map(byte => "0x" + byte.toString(16).padStart(2, "0").toUpperCase()).join(", "));
+                // const reader = new BinaryReader(rpcBytes);
+                // var decodedString = decoder.decode(rpcBytes);
+                // console.log(decodedString.substring(0, 20).replace(/\W/g, ''));
+                // writeFileSync(`./tests/compressedStrings/${decodedString.substring(0, 20).replace(/\W/g, '')}.txt`, Array.from(rpcBytes).map(byte => "0x" + byte.toString(16).padStart(2, "0").toUpperCase()).join(", "));
                 break;
         }
         if (ws.readyState === WebSocket.OPEN) {
