@@ -2,6 +2,7 @@
 import http from "http";
 import Socketio from "socket.io";
 import https from "https";
+import { inspect } from "node:util";
 import { readFileSync, writeFileSync } from "fs";
 import { WebSocket, WebSocketServer } from "ws";
 import * as dotenv from "dotenv";
@@ -21,6 +22,7 @@ const customGameServer = {
 let originalGameServer = {};
 
 const version = 18;
+const decoder = new TextDecoder("utf-8");
 
 const ingameHttpsServerOptions = {
     key: readFileSync("privatekey.pem"),
@@ -159,9 +161,6 @@ function getInputFieldKey(id) {
 function encryptInputField(type, originalValue, key) {
     const mask = (2 ** sizes[type] - 1);
     let realKey = key;
-    // if (type === "Uint16" || type === "Int16") {
-    //     realKey = swapEndianness16(key);
-    // }
 
     let value = originalValue;
     switch (type) {
@@ -180,11 +179,8 @@ function encryptInputField(type, originalValue, key) {
             break;
     }
     let encrypted = (value ^ realKey) & mask;
-    if (type == "Int16") {
-        console.log(originalValue.toString(16).toUpperCase(), key.toString(16).toUpperCase(), encrypted.toString(16).toUpperCase());
-    }
-    // if (type === "Uint16" || type === "Int16") {
-    //     encrypted = swapEndianness16(encrypted);
+    // if (type == "Int16") {
+    //     console.log(originalValue.toString(16).toUpperCase(), key.toString(16).toUpperCase(), encrypted.toString(16).toUpperCase());
     // }
     return encrypted;
 }
@@ -298,7 +294,7 @@ function craftInputRpc(inputRpc, enterWorldResponse, rpcKey) {
 
     const rpcBytes = new Uint8Array(body.view.buffer);
     const outgoing = new Uint8Array(rpcBytes.length);
-    console.log(rpcBytes);
+    // console.log(rpcBytes);
     outgoing.set(cryptRpc(rpcBytes, rpcKey));
     return outgoing;
 }
@@ -326,10 +322,28 @@ wss.on("connection", (ws) => {
 
         var payload = new Uint8Array(message);
         switch (payload[0]) {
+            case 0:
+                // console.clear();
+                console.log("Incoming PACKET_ENTITY_UPDATE:", payload);
+                var decodedString = decoder.decode(payload);
+                console.log(decodedString);
+                break;
             case 4:
-                writeFileSync("enterWorldResponse.txt", Array.from(payload).map(byte => "0x" + byte.toString(16).padStart(2, "0").toUpperCase()).join(", "));
+                // writeFileSync("./tests/enterWorldResponse.dat", Array.from(payload).map(byte => "0x" + byte.toString(16).padStart(2, "0").toUpperCase()).join(", "));
                 enterWorldResponse = decodeEnterWorldResponse(payload);
-                console.log(enterWorldResponse);
+                // writeFileSync("./tests/enterWorldResponse.txt", inspect(enterWorldResponse, false, null, false));
+                console.log("Incoming PACKET_ENTER_WORLD:", inspect(enterWorldResponse, false, null, true));
+                break;
+            case 7:
+                console.log("Incoming PACKET_PING:", payload);
+                break;
+            case 9:
+                const rpcBytes = cryptRpc(payload, rpcKey);
+                console.log("Incoming decrypted PACKET_RPC:", rpcBytes);
+                const reader = new BinaryReader(rpcBytes);
+                var decodedString = decoder.decode(rpcBytes);
+                console.log(decodedString.substring(0, 20).replace(/\W/g, ''));
+                writeFileSync(`./shit/${decodedString.substring(0, 20).replace(/\W/g, '')}.txt`, Array.from(rpcBytes).map(byte => "0x" + byte.toString(16).padStart(2, "0").toUpperCase()).join(", "));
                 break;
         }
         if (ws.readyState === WebSocket.OPEN) {
@@ -344,31 +358,32 @@ wss.on("connection", (ws) => {
         var payload = new Uint8Array(message, message.byteOffset, message.byteLength);
         switch (payload[0]) {
             case 0:
-                console.log("Incoming PACKET_ENTITY_UPDATE:", payload);
+                console.log("Outgoing PACKET_ENTITY_UPDATE:", payload);
                 break;
             case 1:
-                console.log("Incoming PACKET_PLAYER_COUNTER_UPDATE:", payload);
+                console.log("Outgoing PACKET_PLAYER_COUNTER_UPDATE:", payload);
                 break;
             case 2:
-                console.log("Incoming PACKET_SET_WORLD_DIMENSIONS:", payload);
+                console.log("Outgoing PACKET_SET_WORLD_DIMENSIONS:", payload);
                 break;
             case 3:
-                console.log("Incoming PACKET_INPUT:", payload);
+                console.log("Outgoing PACKET_INPUT:", payload);
                 break;
             case 4:
-                console.log("Incoming PACKET_ENTER_WORLD:", payload);
-                console.log("Decoded incoming PACKET_ENTER_WORLD:", decodeEnterWorldRequest(payload));
+                console.log("Outgoing PACKET_ENTER_WORLD:", payload);
+                console.log("Decoded outgoing PACKET_ENTER_WORLD:", decodeEnterWorldRequest(payload));
 
                 proofOfWork = payload.slice(payload.length - 24);
                 rpcKey = computeRpcKey(version, targetUrlBytes, proofOfWork);
                 console.log(rpcKey);
                 break;
             case 7:
-                console.log("Incoming PACKET_PING:", payload);
+                console.log("Outgoing PACKET_PING:", payload);
                 break;
             case 9:
+                break;
                 const rpcBytes = cryptRpc(payload, rpcKey);
-                console.log("Incoming decrypted PACKET_RPC:", rpcBytes);
+                console.log("Outgoing decrypted PACKET_RPC:", rpcBytes);
                 const reader = new BinaryReader(rpcBytes);
 
                 // Read packet id to void it
@@ -434,52 +449,49 @@ wss.on("connection", (ws) => {
                     // console.log(`{ "type": "${type}", "id": ${element.id}, "encrypted": "0x${encrypted.toString(16).toUpperCase()}", "value": ${value} },`);
                 }
                 console.log(input);
-                console.log(rpcElement);
+                // console.log(rpcElement);
                 
-                console.log("message:", message, message.byteOffset, message.byteLength);
-                console.log("message buffer:", message.buffer);
+                // console.log("message:", message, message.byteOffset, message.byteLength);
+                // console.log("message buffer:", message.buffer);
 
                 payload = craftInputRpc(input, enterWorldResponse, rpcKey);
-                console.log("payload:", payload);
-                console.log("payload buffer:", Buffer.from(payload));
+                // console.log("payload:", payload);
+                // console.log("payload buffer:", Buffer.from(payload));
                 
                 let buffer = Buffer.from(message.slice().buffer, message.byteOffset, message.byteLength);
                 buffer.set(Buffer.from(payload));
-                console.log("buffer:", buffer, buffer.byteOffset, buffer.byteLength);
-                console.log("buffer buffer:", buffer.buffer);
-
-                console.log(message == buffer);
+                // console.log("buffer:", buffer, buffer.byteOffset, buffer.byteLength);
+                // console.log("buffer buffer:", buffer.buffer);
 
                 // gameServer.send(new Uint8Array(message, message.byteOffset, message.byteLength));
                 gameServer.send(buffer);
-                return;
                 break;
             case 10:
-                console.log("Incoming PACKET_UDP_CONNECT:", payload);
+                console.log("Outgoing PACKET_UDP_CONNECT:", payload);
                 break;
             case 11:
-                console.log("Incoming PACKET_UDP_TICK:", payload);
+                console.log("Outgoing PACKET_UDP_TICK:", payload);
                 break;
             case 12:
-                console.log("Incoming PACKET_UDP_ACK_TICK:", payload);
+                console.log("Outgoing PACKET_UDP_ACK_TICK:", payload);
                 break;
             case 13:
-                console.log("Incoming PACKET_UDP_PONG:", payload);
+                console.log("Outgoing PACKET_UDP_PONG:", payload);
                 break;
             case 14:
-                console.log("Incoming PACKET_UDP_TICK_WITH_COMPRESSED_UIDS:", payload);
+                console.log("Outgoing PACKET_UDP_TICK_WITH_COMPRESSED_UIDS:", payload);
                 break;
             case 15:
-                console.log("Incoming PACKET_UDP_FRAGMENT:", payload);
+                console.log("Outgoing PACKET_UDP_FRAGMENT:", payload);
                 break;
             case 16:
-                console.log("Incoming PACKET_UDP_CONNECT_1300:", payload);
+                console.log("Outgoing PACKET_UDP_CONNECT_1300:", payload);
                 break;
             case 17:
-                console.log("Incoming PACKET_UDP_CONNECT_500:", payload);
+                console.log("Outgoing PACKET_UDP_CONNECT_500:", payload);
                 break;
             case -1:
-                console.log("Incoming PACKET_UDP_RPC:", payload);
+                console.log("Outgoing PACKET_UDP_RPC:", payload);
                 break;
         }
         if (gameServer.readyState === WebSocket.OPEN) {
@@ -682,47 +694,45 @@ function decodeEnterWorldResponse(payload) {
             const entityMapAttribute = new EntityMapAttribute();
             entityMapAttribute.internalType = reader.readUint32();
             entityMapAttribute.type = reader.readUint32();
-            // Read values out of reader to void them
-            // Can't be bothered to figure out entity maps right now
             switch (entityMapAttribute.type) {
                 case 1:
-                    reader.readUint32();
+                    entityMapAttribute.value = reader.readUint32();
                     break;
                 case 2:
-                    reader.readInt32();
+                    entityMapAttribute.value = reader.readInt32();
                     break;
                 case 3:
-                    reader.readInt32();
+                    entityMapAttribute.value = reader.readInt32();
                     break;
                 case 4:
-                    reader.readString();
+                    entityMapAttribute.value = reader.readString();
                     break;
                 case 5:
-                    reader.readVector2();
+                    entityMapAttribute.value = reader.readVector2();
                     break;
                 case 7:
-                    reader.readArrayVector2();
+                    entityMapAttribute.value = reader.readArrayVector2();
                     break;
                 case 8:
-                    reader.readArrayUint32();
+                    entityMapAttribute.value = reader.readArrayUint32();
                     break;
                 case 9:
-                    reader.readUint16();
+                    entityMapAttribute.value = reader.readUint16();
                     break;
                 case 10:
-                    reader.readUint8();
+                    entityMapAttribute.value = reader.readUint8();
                     break;
                 case 11:
-                    reader.readInt16();
+                    entityMapAttribute.value = reader.readInt16();
                     break;
                 case 12:
-                    reader.readInt8();
+                    entityMapAttribute.value = reader.readInt8();
                     break;
                 case 16:
-                    reader.readArrayInt32();
+                    entityMapAttribute.value = reader.readArrayInt32();
                     break;
                 case 17:
-                    reader.readArrayUint8();
+                    entityMapAttribute.value = reader.readArrayUint8();
                     break;
             }
             entityMap.attributes.push(entityMapAttribute);
@@ -804,6 +814,7 @@ class EntityMapAttribute {
     constructor() {
         this.internalType = null;
         this.type = null;
+        this.value = null;
     }
 }
 
