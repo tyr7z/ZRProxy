@@ -21,7 +21,7 @@ const customGameServer = {
 };
 let originalGameServer = {};
 
-const version = 18;
+const version = 19;
 const decoder = new TextDecoder("utf-8");
 
 const ingameHttpsServerOptions = {
@@ -299,6 +299,7 @@ function craftInputRpc(inputRpc, enterWorldResponse, rpcKey) {
     return outgoing;
 }
 
+// var entityUpdates = 0;
 const wss = new WebSocketServer({ server: ingameHttpsServer });
 wss.on("connection", (ws) => {
     console.log("Client connected to ingame");
@@ -324,14 +325,18 @@ wss.on("connection", (ws) => {
         switch (payload[0]) {
             case 0:
                 // console.clear();
-                console.log("Incoming PACKET_ENTITY_UPDATE:", payload);
+                // return;
+                // if (entityUpdates == 0) writeFileSync("./tests/entityUpdate.dat", Array.from(payload).map(byte => "0x" + byte.toString(16).padStart(2, "0").toUpperCase()).join(", "));
+                // if (entityUpdates == 0) writeFileSync("./tests/entityUpdate.bin", payload);
+                // entityUpdates++;
+                // console.log("Incoming PACKET_ENTITY_UPDATE:", inspect(payload, { maxArrayLength: 2000, showHidden: false, depth: 0, colors: true }));
                 // var decodedString = decoder.decode(payload);
                 // console.log(decodedString);
                 break;
             case 4:
                 // writeFileSync("./tests/enterWorldResponse.dat", Array.from(payload).map(byte => "0x" + byte.toString(16).padStart(2, "0").toUpperCase()).join(", "));
                 enterWorldResponse = decodeEnterWorldResponse(payload);
-                // writeFileSync("./tests/enterWorldResponse.txt", inspect(enterWorldResponse, false, null, false));
+                // writeFileSync("./tests/enterWorldResponse.json", inspect(enterWorldResponse, false, null, false));
                 console.log("Incoming PACKET_ENTER_WORLD:", inspect(enterWorldResponse, false, null, true));
                 break;
             case 7:
@@ -375,13 +380,13 @@ wss.on("connection", (ws) => {
 
                 proofOfWork = payload.slice(payload.length - 24);
                 rpcKey = computeRpcKey(version, targetUrlBytes, proofOfWork);
-                console.log(rpcKey);
+                console.log("rpcKey:", rpcKey);
                 break;
             case 7:
                 console.log("Outgoing PACKET_PING:", payload);
                 break;
             case 9:
-                break;
+                // break;
                 const rpcBytes = cryptRpc(payload, rpcKey);
                 console.log("Outgoing decrypted PACKET_RPC:", rpcBytes);
                 const reader = new BinaryReader(rpcBytes);
@@ -395,7 +400,7 @@ wss.on("connection", (ws) => {
                 if (!rpcElement) break;
                 const parameters = rpcElement.parameters;
 
-                if (rpcElement.internalId !== 1018504365) break;
+                if (rpcElement.internalId !== 0x4F8DA246) break;
                 // console.clear();
 
                 let input = inputRpc;
@@ -446,7 +451,7 @@ wss.on("connection", (ws) => {
                     const field = Object.entries(inputRpc).find(([key, value]) => value.id === element.id);
                     // if (input[field[0]] == "inputUid") value = 0;
                     input[field[0]].value = decryptInputField(type, encrypted, field[1].key);
-                    // console.log(`{ "type": "${type}", "id": ${element.id}, "encrypted": "0x${encrypted.toString(16).toUpperCase()}", "value": ${value} },`);
+                    console.log(`{ "type": "${type}", "id": ${element.id}, "encrypted": "0x${encrypted.toString(16).toUpperCase()}", "value": ${value} },`);
                 }
                 console.log(input);
                 // console.log(rpcElement);
@@ -454,7 +459,7 @@ wss.on("connection", (ws) => {
                 // console.log("message:", message, message.byteOffset, message.byteLength);
                 // console.log("message buffer:", message.buffer);
 
-                payload = craftInputRpc(input, enterWorldResponse, rpcKey);
+                // payload = craftInputRpc(input, enterWorldResponse, rpcKey);
                 // console.log("payload:", payload);
                 // console.log("payload buffer:", Buffer.from(payload));
                 
@@ -569,6 +574,7 @@ io.on("connection", (socket) => {
                 switch (eventName) {
                     case "partyJoinServer":
                         originalGameServer = { ...eventData };
+                        console.log("Original partyJoinServer:", originalGameServer);
                         eventData = Object.assign(eventData, customGameServer);
                         break;
                 }
