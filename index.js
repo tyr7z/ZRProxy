@@ -13,8 +13,8 @@ dotenv.config();
 const customGameServer = {
     ipv4: `${process.env.INGAME_HOST || "127.0.0.1"}:${process.env.INGAME_PORT || "3003"}`,
     ipv6: "[::1]:3003",
-    hostname: `localhost:${process.env.INGAME_PORT || "3003"}`,
-    hostnameV4: `localhost:${process.env.INGAME_PORT || "3003"}`,
+    hostname: `127.0.0.1:${process.env.INGAME_PORT || "3003"}`,
+    hostnameV4: `127.0.0.1:${process.env.INGAME_PORT || "3003"}`,
     endpoints: null,
     hostnames: null,
     hostnamesV4: null
@@ -399,7 +399,8 @@ wss.on("connection", (ws) => {
                 const rpcElement = enterWorldResponse.rpcs.find((rpc) => rpc.index === index);
                 if (!rpcElement) break;
                 const parameters = rpcElement.parameters;
-
+                
+                break;
                 if (rpcElement.internalId !== 0x4F8DA246) break;
                 // console.clear();
 
