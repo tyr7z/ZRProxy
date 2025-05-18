@@ -10,8 +10,10 @@
   "author": "tyr7z",
   "license": "MIT",
   "dependencies": {
+    "chalk": "^5.4.1",
     "dotenv": "^16.0.3",
     "socket.io": "^2.5.1",
+    "socket.io-client": "^4.8.1",
     "ws": "^8.18.0"
   },
   "devDependencies": {

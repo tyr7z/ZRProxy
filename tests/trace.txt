@@ -1,0 +1,18 @@
+https://mason-ipv4.zombsroyale.io/gateway/    To client    0{"sid":"0MBdyratBaS_AY0zG2JA","upgrades":[],"pingInterval":55000,"pingTimeout":120000}
+https://mason.zombsroyale.io/gateway/    To client    0{"sid":"Hfwnv4twUMVK2BYRG1IO","upgrades":[],"pingInterval":55000,"pingTimeout":120000}
+https://mason.zombsroyale.io/gateway/    To client    40
+https://mason.zombsroyale.io/gateway/    To server    42["setPlatform", "web"]
+https://mason.zombsroyale.io/gateway/    To server    42["setVersion", "5.8.7"]
+https://mason.zombsroyale.io/gateway/    To server    42["setName", "Player"]
+https://mason.zombsroyale.io/gateway/    To server    2
+https://mason.zombsroyale.io/gateway/    To client    3
+https://mason.zombsroyale.io/gateway/    To server    2
+https://mason.zombsroyale.io/gateway/    To client    3
+https://mason.zombsroyale.io/gateway/    To server    2
+https://mason.zombsroyale.io/gateway/    To client    3
+https://mason.zombsroyale.io/gateway/    To server    2
+https://mason.zombsroyale.io/gateway/    To client    3
+https://mason.zombsroyale.io/gateway/    To server    2
+https://mason.zombsroyale.io/gateway/    To client    3
+https://mason.zombsroyale.io/gateway/    To server    2
+https://mason.zombsroyale.io/gateway/    To client    3

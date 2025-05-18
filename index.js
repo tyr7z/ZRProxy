@@ -1,11 +1,15 @@
 // Import the necessary modules
-import http from "http";
-import Socketio from "socket.io";
-import https from "https";
-import { inspect } from "node:util";
-import { readFileSync, writeFileSync } from "fs";
+import { createServer as createHttpsServer } from "https";
+import { createServer as createHttpServer } from "http";
+import { parse } from "url";
+import { randomBytes } from "crypto";
+import { inspect } from "util";
+import { readFileSync, write, writeFileSync } from "fs";
 import { WebSocket, WebSocketServer } from "ws";
+import dgram from "dgram";
 import * as dotenv from "dotenv";
+import { Codec } from "./codec.js"
+import { EnterWorldResponse } from "./rpctypes.js";
 
 // Load environment config
 dotenv.config();
@@ -13,37 +17,20 @@ dotenv.config();
 const customGameServer = {
     ipv4: `${process.env.INGAME_HOST || "127.0.0.1"}:${process.env.INGAME_PORT || "3003"}`,
     ipv6: "[::1]:3003",
-    hostname: `127.0.0.1:${process.env.INGAME_PORT || "3003"}`,
-    hostnameV4: `127.0.0.1:${process.env.INGAME_PORT || "3003"}`,
+    hostname: `${process.env.INGAME_HOST || "127.0.0.1"}:${process.env.INGAME_PORT || "3003"}`,
+    hostnameV4: `${process.env.INGAME_HOST || "127.0.0.1"}:${process.env.INGAME_PORT || "3003"}`,
     endpoints: null,
     hostnames: null,
     hostnamesV4: null
 };
 let originalGameServer = {};
 
-const version = 19;
-const decoder = new TextDecoder("utf-8");
+const CODEC_VERSION = 19;
 
-const ingameHttpsServerOptions = {
+const ingameHttpsServer = createHttpsServer({
     key: readFileSync("privatekey.pem"),
     cert: readFileSync("certificate.pem")
-};
-const ingameHttpsServer = https.createServer(ingameHttpsServerOptions);
-
-function parseSocketIOMessage(message) {
-    try {
-        // Remove the leading "42" and parse the rest of the message as JSON
-        const jsonData = JSON.parse(message.slice(2));
-
-        // Extract the event name and data from the parsed JSON
-        const eventName = jsonData[0];
-        const eventData = jsonData[1];
-
-        return { eventName, eventData };
-    } catch {
-        return null;
-    }
-}
+});
 
 const wss = new WebSocketServer({ server: ingameHttpsServer });
 wss.on("connection", (ws) => {
@@ -52,7 +39,8 @@ wss.on("connection", (ws) => {
     var targetUrlBytes = new TextEncoder().encode("/" + originalGameServer.endpoint);
     var proofOfWork = null;
     var rpcKey = new Uint8Array(8);
-    let enterWorldResponse;
+    var codec = new Codec();
+    let enterWorldResponse = new EnterWorldResponse();
 
     console.log(`wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`);
     let gameServer = new WebSocket(`wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`);
@@ -68,21 +56,59 @@ wss.on("connection", (ws) => {
 
         var payload = new Uint8Array(message);
         switch (payload[0]) {
+            /*
             case 0:
                 console.log("Incoming PACKET_ENTITY_UPDATE:", payload);
                 break;
+            */
             case 4:
                 console.log("Incoming PACKET_ENTER_WORLD:", payload);
+                enterWorldResponse = codec.decodeEnterWorldResponse(payload);
+
+                // Configuration
+                const LOCAL_PORT = 1337;
+                const REMOTE_HOST = originalGameServer.ipv4;
+                const REMOTE_PORT = enterWorldResponse.udpPort;
+                let clientInfo = null;
+
+                const proxySocket = dgram.createSocket("udp4");
+
+                proxySocket.on("message", (msg, rinfo) => {
+                    const sender = `${rinfo.address}:${rinfo.port}`;
+                    const hexString = msg.toString("hex").match(/.{1,2}/g)?.map(byte => byte.toUpperCase()).join(" ");
+
+                    if (rinfo.address === REMOTE_HOST && rinfo.port === REMOTE_PORT) {
+                        // Message from server -> client
+                        if (!clientInfo) return;
+                        console.log(`Server ${sender} -> Client ${clientInfo.address}:${clientInfo.port}:`, hexString);
+                        proxySocket.send(msg, clientInfo.port, clientInfo.address);
+                    } else {
+                        // Message from client -> server
+                        clientInfo = rinfo;
+                        console.log(`Client ${sender} -> Server ${REMOTE_HOST}:${REMOTE_PORT},`, hexString);
+                        proxySocket.send(msg, REMOTE_PORT, REMOTE_HOST);
+                    }
+                });
+
+                proxySocket.bind(LOCAL_PORT, () => {
+                    console.log(`UDP proxy listening on port ${LOCAL_PORT}`);
+                });
+
+                enterWorldResponse.udpPort = LOCAL_PORT;
+                payload = codec.encodeEnterWorldResponse(enterWorldResponse);
                 break;
+            /*
             case 7:
                 console.log("Incoming PACKET_PING:", payload);
                 break;
             case 9:
                 console.log("Incoming decrypted PACKET_RPC:", payload);
                 break;
+            */
         }
+
         if (ws.readyState === WebSocket.OPEN) {
-            ws.send(message);
+            ws.send(payload);
         }
     });
 
@@ -92,6 +118,7 @@ wss.on("connection", (ws) => {
 
         var payload = new Uint8Array(message, message.byteOffset, message.byteLength);
         switch (payload[0]) {
+            /*
             case 0:
                 console.log("Outgoing PACKET_ENTITY_UPDATE:", payload);
                 break;
@@ -107,9 +134,11 @@ wss.on("connection", (ws) => {
             case 4:
                 console.log("Outgoing PACKET_ENTER_WORLD:", payload);
                 break;
+            */
             case 7:
                 console.log("Outgoing PACKET_PING:", payload);
                 break;
+            /*
             case 9:
                 console.log("Outgoing PACKET_RPC:", payload);
                 break;
@@ -140,7 +169,9 @@ wss.on("connection", (ws) => {
             case -1:
                 console.log("Outgoing PACKET_UDP_RPC:", payload);
                 break;
+            */
         }
+
         if (gameServer.readyState === WebSocket.OPEN) {
             gameServer.send(message);
         }
@@ -170,98 +201,161 @@ ingameHttpsServer.listen(
     }
 );
 
-// Create an HTTP server
-const server = http.createServer();
+// Shared proxied Mason server
+const proxiedMason = new WebSocketServer({ noServer: true });
 
-// Create a Socket.io server instance
-const io = new Socketio(server, { path: "/gateway" });
+// WebSocket upgrade handler (shared for both HTTP and HTTPS)
+function handleUpgrade(server) {
+    server.on("upgrade", (req, socket, head) => {
+        const { pathname, query } = parse(req.url, true);
+        console.log(`Upgrade on ${pathname}`, query);
 
-// Set up a listener for the connection event
-io.on("connection", (socket) => {
-    console.log("Client connected");
+        if (pathname === "/gateway/" && query.EIO === "4" && query.transport === "websocket") {
+            proxiedMason.handleUpgrade(req, socket, head, (ws) => {
+                proxiedMason.emit("connection", ws, req);
+            });
+        } else {
+            socket.destroy();
+        }
+    });
+}
+
+function parseSocketIOMessage(message) {
+    try {
+        // Remove the leading "42" and parse the rest of the message as JSON
+        const jsonData = JSON.parse(message.slice(2));
+
+        // Extract the event name and data from the parsed JSON
+        const eventName = jsonData[0];
+        const eventData = jsonData[1];
+
+        return { eventName, eventData };
+    } catch {
+        return null;
+    }
+}
+
+// Handle proxied Mason connections
+proxiedMason.on("connection", (clientSocket) => {
+    console.log("Client connected to Mason proxy");
 
     // Connect to the target WebSocket server
-    const mason = new WebSocket("wss://mason-ipv4.zombsroyale.io/gateway/?EIO=4&transport=websocket");
+    const originalMason = new WebSocket("wss://mason-ipv4.zombsroyale.io/gateway/?EIO=4&transport=websocket");
 
-    // Use middleware to intercept and forward all events from the Socket.IO client
-    socket.use((packet, next) => {
-        const eventName = packet[0];
-        const args = packet.slice(1);
+    /*
+    const sid = randomBytes(16).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-        const message = JSON.stringify({
-            event: eventName,
-            data: args
-        });
+    // 1. Engine.IO handshake packet
+    const handshake = `0${JSON.stringify({
+        sid,
+        upgrades: [],
+        pingInterval: 55000,
+        pingTimeout: 120000
+    })}`;
+    console.log("⬅️ From server: ", handshake);
+    clientSocket.send(handshake);
 
-        const realPacket = "42" + JSON.stringify(packet);
+    // 2. Socket.IO connect packet
+    console.log("⬅️ From server: ", "40");
+    clientSocket.send("40");
+    */
 
-        console.log("Intercepted packet:", realPacket);
+    // 3. Handle messages from client
+    clientSocket.on("message", (payload) => {
+        const msg = payload.toString();
+        console.log("➡️ From client:", msg);
 
-        if (mason.readyState === WebSocket.OPEN) {
-            mason.send(realPacket);
+        // Forward messages to real Mason
+        if (originalMason.readyState === WebSocket.OPEN) {
+            originalMason.send(msg);
         }
 
-        // Continue processing the event
-        next();
+        /*
+        if (msg === "2") { // ping
+            console.log("⬅️ From server: ", "3");
+            clientSocket.send("3"); // pong
+        } else if (msg.startsWith("42")) {
+            const { eventName, eventData } = parseSocketIOMessage(msg);
+            console.log(`📨 Event: ${eventName}, Data: ${eventData}`);
+        } else {
+            console.error("❌ Invalid message:", msg);
+        }
+        */
     });
 
-    // Relay all messages from the target WebSocket server back to the Socket.IO client
-    mason.on("message", (payload) => {
-        const message = payload.toString();
-        try {
-            if (message.startsWith("42")) {
-                // Handle text (JSON) data
-                const parsedMessage = parseSocketIOMessage(message);
-                let { eventName, eventData } = parsedMessage;
-                switch (eventName) {
-                    case "partyJoinServer":
-                        originalGameServer = { ...eventData };
-                        console.log("Original partyJoinServer:", originalGameServer);
-                        eventData = Object.assign(eventData, customGameServer);
-                        break;
-                }
-                console.log(`Message from target server: ${eventName}`, eventData);
-                socket.emit(eventName, eventData);
-            } else {
-                console.log(`Raw message from target server: ${message}`);
+    // Relay all messages from the original Mason server back to the client
+    originalMason.on("message", (payload) => {
+        var msg = payload.toString();
+        console.log("⬅️ From server: ", msg);
+
+        const parsedMessage = parseSocketIOMessage(msg);
+        if (parsedMessage) {
+            var { eventName, eventData } = parsedMessage;
+            switch (eventName) {
+                case "partyJoinServer":
+                    originalGameServer = { ...eventData };
+                    console.log("Original partyJoinServer:", originalGameServer);
+                    eventData = Object.assign(eventData, customGameServer);
+                    msg = `42["${eventName}", ${JSON.stringify(eventData)}]`;
+                    break;
             }
-        } catch (error) {
-            console.error("Failed to parse message:", message, error);
+        }
+
+        if (clientSocket.readyState === WebSocket.OPEN) {
+            clientSocket.send(msg);
         }
     });
 
     // Handle errors on both sides
-    socket.on("error", (err) => {
-        console.error("Socket.IO client error:", err);
+    clientSocket.on("error", (err) => {
+        console.error("Client socket error:", err);
     });
 
-    mason.on("error", (err) => {
-        console.error("Mason WebSocket error:", err);
+    originalMason.on("error", (err) => {
+        console.error("Original Mason WebSocket error:", err);
     });
 
-    // Handle the Socket.IO client disconnecting
-    socket.on("disconnect", () => {
-        console.log("Socket.IO client disconnected");
-        if (mason.readyState === WebSocket.OPEN) {
-            mason.close();
-        }
+    // Handle closures
+    clientSocket.on("close", () => {
+        console.log("Client disconnected");
+        originalMason.close();
     });
 
-    // Handle the target WebSocket server closing
-    mason.on("close", () => {
-        console.log("Mason server connection closed");
-        socket.disconnect(true);
+    originalMason.on("close", () => {
+        console.log("Disconnected from target server");
+        clientSocket.close();
     });
 });
 
-// Start the server
-server.listen(
+/*
+// 🔐 HTTPS Mason server
+const httpsMasonServer = createHttpsServer({
+    key: readFileSync("privatekey.pem"),
+    cert: readFileSync("certificate.pem")
+});
+handleUpgrade(httpsMasonServer);
+httpsMasonServer.listen(
     parseInt(process.env.MASON_PORT || "3002"),
-    process.env.MASON_HOST || "localhost",
+    process.env.MASON_HOST || "127.0.0.1",
     () => {
         console.log(
             `[${process.env.MASON_SERVER_NAME || "ZRProxy Mason"
-            }] Mason is now listening on port ${process.env.MASON_PORT || "3002"}`
+            }] Mason is now listening on https://${process.env.MASON_HOST || "127.0.0.1"}:${process.env.MASON_PORT || "3002"}`
+        );
+    }
+);
+*/
+
+// 🌐 HTTP Mason server
+const httpMasonServer = createHttpServer();
+handleUpgrade(httpMasonServer);
+httpMasonServer.listen(
+    parseInt(process.env.MASON_PORT || "3002"),
+    process.env.MASON_HOST || "127.0.0.1",
+    () => {
+        console.log(
+            `[${process.env.MASON_SERVER_NAME || "ZRProxy Mason"
+            }] Mason is now listening on http://${process.env.MASON_HOST || "127.0.0.1"}:${process.env.MASON_PORT || "3002"}`
         );
     }
 );
