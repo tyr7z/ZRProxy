@@ -64,6 +64,7 @@ wss.on("connection", (ws) => {
             case 4:
                 console.log("Incoming PACKET_ENTER_WORLD:", payload);
                 enterWorldResponse = codec.decodeEnterWorldResponse(payload);
+                // writeFileSync("enterWorldResponse.json", JSON.stringify(enterWorldResponse, null, 2));
 
                 // Configuration
                 const LOCAL_PORT = 1337;
@@ -85,7 +86,7 @@ wss.on("connection", (ws) => {
                     } else {
                         // Message from client -> server
                         clientInfo = rinfo;
-                        console.log(`Client ${sender} -> Server ${REMOTE_HOST}:${REMOTE_PORT},`, hexString);
+                        console.log(`Client ${sender} -> Server ${REMOTE_HOST}:${REMOTE_PORT}:`, hexString);
                         proxySocket.send(msg, REMOTE_PORT, REMOTE_HOST);
                     }
                 });
