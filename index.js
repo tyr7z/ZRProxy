@@ -25,8 +25,6 @@ const customGameServer = {
 };
 let originalGameServer = {};
 
-const CODEC_VERSION = 19;
-
 const ingameHttpsServer = createHttpsServer({
     key: readFileSync("privatekey.pem"),
     cert: readFileSync("certificate.pem")
@@ -36,9 +34,6 @@ const wss = new WebSocketServer({ server: ingameHttpsServer });
 wss.on("connection", (ws) => {
     console.log("Client connected to ingame");
 
-    var targetUrlBytes = new TextEncoder().encode("/" + originalGameServer.endpoint);
-    var proofOfWork = null;
-    var rpcKey = new Uint8Array(8);
     var codec = new Codec();
     let enterWorldResponse = new EnterWorldResponse();
 
@@ -95,17 +90,19 @@ wss.on("connection", (ws) => {
                     console.log(`UDP proxy listening on port ${LOCAL_PORT}`);
                 });
 
-                enterWorldResponse.udpPort = LOCAL_PORT;
-                payload = codec.encodeEnterWorldResponse(enterWorldResponse);
+                // enterWorldResponse.udpPort = LOCAL_PORT;
+                // payload = codec.encodeEnterWorldResponse(enterWorldResponse);
                 break;
             /*
             case 7:
                 console.log("Incoming PACKET_PING:", payload);
                 break;
-            case 9:
-                console.log("Incoming decrypted PACKET_RPC:", payload);
-                break;
             */
+            case 9:
+                const msg = codec.cryptRpc(payload);
+                const hexString = Array.from(msg).map(byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+                console.log("Outgoing decrypted PACKET_RPC:", hexString);
+                break;
         }
 
         if (ws.readyState === WebSocket.OPEN) {
@@ -132,17 +129,22 @@ wss.on("connection", (ws) => {
             case 3:
                 console.log("Outgoing PACKET_INPUT:", payload);
                 break;
+            */
             case 4:
                 console.log("Outgoing PACKET_ENTER_WORLD:", payload);
+                const enterWorldRequest = codec.decodeEnterWorldRequest(payload);
+                console.log(enterWorldRequest);
+                codec.rpcKey = codec.computeRpcKey(enterWorldRequest.version, new TextEncoder().encode("/" + originalGameServer.endpoint), enterWorldRequest.proofOfWork);
                 break;
-            */
             case 7:
                 console.log("Outgoing PACKET_PING:", payload);
                 break;
-            /*
             case 9:
-                console.log("Outgoing PACKET_RPC:", payload);
+                const msg = codec.cryptRpc(payload);
+                const hexString = Array.from(msg).map(byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+                console.log("Outgoing decrypted PACKET_RPC:", hexString);
                 break;
+            /*
             case 10:
                 console.log("Outgoing PACKET_UDP_CONNECT:", payload);
                 break;

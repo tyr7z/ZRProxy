@@ -1,6 +1,6 @@
 // import { sha1 } from "js-sha1";
 
-import { EnterWorldResponse, PacketId, Rpc, ParameterType, ParameterSize, RpcParameter, EntityMap, EntityMapAttribute, EntityUpdate, AttributeType, NetworkEntity } from "./rpctypes.js";
+import { EnterWorldRequest, EnterWorldResponse, PacketId, Rpc, ParameterType, ParameterSize, RpcParameter, EntityMap, EntityMapAttribute, EntityUpdate, AttributeType, NetworkEntity } from "./rpctypes.js";
 import { BinaryReader, BinaryWriter } from "./binaryutils.js";
 
 export class Codec {
@@ -292,6 +292,15 @@ export class Codec {
                 return reader.readArrayUint8();
         }
         return undefined;
+    }
+
+    decodeEnterWorldRequest(data) {
+        const reader = new BinaryReader(data, 1);
+        const enterWorldRequest = new EnterWorldRequest();
+        enterWorldRequest.displayName = reader.readString();
+        enterWorldRequest.version = reader.readUint32();
+        enterWorldRequest.proofOfWork = reader.readArrayUint8();
+        return enterWorldRequest;
     }
 
     decodeEnterWorldResponse(data) {

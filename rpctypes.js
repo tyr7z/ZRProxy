@@ -109,6 +109,14 @@ export const ParameterSize = {
     [ParameterType.CompressedString]: -1
 };
 
+export class EnterWorldRequest {
+    constructor() {
+        this.displayName = null;
+        this.version = null;
+        this.proofOfWork = null;
+    }
+}
+
 export class EnterWorldResponse {
     constructor() {
         this.version = null;
