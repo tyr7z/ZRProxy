@@ -59,7 +59,7 @@ wss.on("connection", (ws) => {
             case 4:
                 console.log("Incoming PACKET_ENTER_WORLD:", payload);
                 enterWorldResponse = codec.decodeEnterWorldResponse(payload);
-                // writeFileSync("enterWorldResponse.json", JSON.stringify(enterWorldResponse, null, 2));
+                writeFileSync("enterWorldResponse.json", JSON.stringify(enterWorldResponse, null, 2));
 
                 // Configuration
                 const LOCAL_PORT = 1337;
@@ -90,8 +90,8 @@ wss.on("connection", (ws) => {
                     console.log(`UDP proxy listening on port ${LOCAL_PORT}`);
                 });
 
-                // enterWorldResponse.udpPort = LOCAL_PORT;
-                // payload = codec.encodeEnterWorldResponse(enterWorldResponse);
+                enterWorldResponse.udpPort = LOCAL_PORT;
+                payload = codec.encodeEnterWorldResponse(enterWorldResponse);
                 break;
             /*
             case 7:
