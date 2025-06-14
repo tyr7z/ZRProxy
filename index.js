@@ -8,37 +8,46 @@ import { readFileSync, write, writeFileSync } from "fs";
 import { WebSocket, WebSocketServer } from "ws";
 import dgram from "dgram";
 import * as dotenv from "dotenv";
-import { Codec } from "./codec.js"
-import { EnterWorldResponse } from "./rpctypes.js";
+import { Codec, PacketId } from "zombslib";
 
 // Load environment config
 dotenv.config();
 
 const customGameServer = {
-    ipv4: `${process.env.INGAME_HOST || "127.0.0.1"}:${process.env.INGAME_PORT || "3003"}`,
+    ipv4: `${process.env.INGAME_HOST || "127.0.0.1"}:${
+        process.env.INGAME_PORT || "3003"
+    }`,
     ipv6: "[::1]:3003",
-    hostname: `${process.env.INGAME_HOST || "127.0.0.1"}:${process.env.INGAME_PORT || "3003"}`,
-    hostnameV4: `${process.env.INGAME_HOST || "127.0.0.1"}:${process.env.INGAME_PORT || "3003"}`,
+    hostname: `${process.env.INGAME_HOST || "127.0.0.1"}:${
+        process.env.INGAME_PORT || "3003"
+    }`,
+    hostnameV4: `${process.env.INGAME_HOST || "127.0.0.1"}:${
+        process.env.INGAME_PORT || "3003"
+    }`,
     endpoints: null,
     hostnames: null,
-    hostnamesV4: null
+    hostnamesV4: null,
 };
 let originalGameServer = {};
 
 const ingameHttpsServer = createHttpsServer({
     key: readFileSync("privatekey.pem"),
-    cert: readFileSync("certificate.pem")
+    cert: readFileSync("certificate.pem"),
 });
 
 const wss = new WebSocketServer({ server: ingameHttpsServer });
 wss.on("connection", (ws) => {
     console.log("Client connected to ingame");
 
-    var codec = new Codec();
-    let enterWorldResponse = new EnterWorldResponse();
+    let codec = new Codec("../../rpcs/Windows-Rpcs.json");
+    let updates = 0;
 
-    console.log(`wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`);
-    let gameServer = new WebSocket(`wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`);
+    console.log(
+        `wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`
+    );
+    let gameServer = new WebSocket(
+        `wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`
+    );
     gameServer.binaryType = "arraybuffer";
     gameServer.on("open", () => {
         console.log("Game server connected");
@@ -51,20 +60,20 @@ wss.on("connection", (ws) => {
 
         var payload = new Uint8Array(message);
         switch (payload[0]) {
-            /*
-            case 0:
-                console.log("Incoming PACKET_ENTITY_UPDATE:", payload);
-                break;
-            */
-            case 4:
+            case PacketId.EnterWorld:
                 console.log("Incoming PACKET_ENTER_WORLD:", payload);
-                enterWorldResponse = codec.decodeEnterWorldResponse(payload);
-                writeFileSync("enterWorldResponse.json", JSON.stringify(enterWorldResponse, null, 2));
+                codec.enterWorldResponse =
+                    codec.decodeEnterWorldResponse(payload);
+                writeFileSync(
+                    "enterWorldResponse.json",
+                    JSON.stringify(codec.enterWorldResponse, null, 2)
+                );
 
                 // Configuration
+                /*
                 const LOCAL_PORT = 1337;
                 const REMOTE_HOST = originalGameServer.ipv4;
-                const REMOTE_PORT = enterWorldResponse.udpPort;
+                const REMOTE_PORT = codec.enterWorldResponse.udpPort;
                 let clientInfo = null;
 
                 const proxySocket = dgram.createSocket("udp4");
@@ -90,22 +99,53 @@ wss.on("connection", (ws) => {
                     console.log(`UDP proxy listening on port ${LOCAL_PORT}`);
                 });
 
-                enterWorldResponse.udpPort = LOCAL_PORT;
-                payload = codec.encodeEnterWorldResponse(enterWorldResponse);
+                codec.enterWorldResponse.udpPort = LOCAL_PORT;
+                payload = codec.encodeEnterWorldResponse(codec.enterWorldResponse);
+                */
                 break;
-            /*
-            case 7:
-                console.log("Incoming PACKET_PING:", payload);
+            case PacketId.Rpc:
+                const decrypedData = codec.cryptRpc(payload);
+
+                // const hexString = Array.from(decrypedData).map(byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+                // console.log("Incoming decrypted PACKET_RPC:", hexString);
+
+                const definition = codec.enterWorldResponse.rpcs.find(
+                    (rpc) => rpc.index === decrypedData[1]
+                );
+
+                const rpc = codec.decodeRpc(definition, decrypedData);
+
+                if (rpc !== undefined && rpc.name !== null) {
+                    console.log(rpc.name, rpc.data);
+                }
                 break;
-            */
-            case 9:
-                const msg = codec.cryptRpc(payload);
-                const hexString = Array.from(msg).map(byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(' ');
-                console.log("Outgoing decrypted PACKET_RPC:", hexString);
+            case PacketId.EntityUpdate:
+                updates++;
+                if (updates !== 1) return;
+                console.log(payload);
+                const update = codec.decodeEntityUpdate(payload);
+                writeFileSync("update-10.txt", payload);
+                // console.log("EntityUpdate", update);
+                /*
+                for (const [key, value] of codec.entityList) {
+                    if (key !== codec.enterWorldResponse.uid)
+                        codec.entityList.delete(key);
+                }
+                console.log(codec.entityList);
+                payload = codec.encodeEntityUpdate({
+                    createdEntities: [codec.enterWorldResponse.uid],
+                    tick: update.tick,
+                    deletedEntities: [],
+                });
+                */
+                payload = codec.encodeEntityUpdate(update);
+                writeFileSync("update-11.txt", payload);
+                console.log(payload);
                 break;
         }
 
         if (ws.readyState === WebSocket.OPEN) {
+            if (payload[0] === PacketId.EntityUpdate && updates !== 1) return;
             ws.send(payload);
         }
     });
@@ -114,65 +154,42 @@ wss.on("connection", (ws) => {
     ws.on("message", (message) => {
         // console.log("Client to server:", message);
 
-        var payload = new Uint8Array(message, message.byteOffset, message.byteLength);
+        var payload = new Uint8Array(
+            message,
+            message.byteOffset,
+            message.byteLength
+        );
         switch (payload[0]) {
-            /*
-            case 0:
-                console.log("Outgoing PACKET_ENTITY_UPDATE:", payload);
-                break;
-            case 1:
-                console.log("Outgoing PACKET_PLAYER_COUNTER_UPDATE:", payload);
-                break;
-            case 2:
-                console.log("Outgoing PACKET_SET_WORLD_DIMENSIONS:", payload);
-                break;
-            case 3:
-                console.log("Outgoing PACKET_INPUT:", payload);
-                break;
-            */
-            case 4:
+            case PacketId.EnterWorld:
                 console.log("Outgoing PACKET_ENTER_WORLD:", payload);
-                const enterWorldRequest = codec.decodeEnterWorldRequest(payload);
-                console.log(enterWorldRequest);
-                codec.rpcKey = codec.computeRpcKey(enterWorldRequest.version, new TextEncoder().encode("/" + originalGameServer.endpoint), enterWorldRequest.proofOfWork);
+                const enterWorldRequest =
+                    codec.decodeEnterWorldRequest(payload);
+                codec.computeRpcKey(
+                    enterWorldRequest.version,
+                    new TextEncoder().encode("/" + originalGameServer.endpoint),
+                    enterWorldRequest.proofOfWork
+                );
                 break;
-            case 7:
+            case PacketId.Ping:
                 console.log("Outgoing PACKET_PING:", payload);
                 break;
-            case 9:
-                const msg = codec.cryptRpc(payload);
-                const hexString = Array.from(msg).map(byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(' ');
-                console.log("Outgoing decrypted PACKET_RPC:", hexString);
+            case PacketId.Rpc:
+                const decrypedData = codec.cryptRpc(payload);
+
+                // const hexString = Array.from(decrypedData).map(byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+                // console.log("Outgoing decrypted PACKET_RPC:", hexString);
+
+                const definition = codec.enterWorldResponse.rpcs.find(
+                    (rpc) => rpc.index === decrypedData[1]
+                );
+
+                const rpc = codec.decodeRpc(definition, decrypedData);
+
+                if (rpc !== undefined && rpc.name !== null) {
+                    if (rpc.name !== "InputRpc")
+                        console.log(rpc.name, rpc.data);
+                }
                 break;
-            /*
-            case 10:
-                console.log("Outgoing PACKET_UDP_CONNECT:", payload);
-                break;
-            case 11:
-                console.log("Outgoing PACKET_UDP_TICK:", payload);
-                break;
-            case 12:
-                console.log("Outgoing PACKET_UDP_ACK_TICK:", payload);
-                break;
-            case 13:
-                console.log("Outgoing PACKET_UDP_PONG:", payload);
-                break;
-            case 14:
-                console.log("Outgoing PACKET_UDP_TICK_WITH_COMPRESSED_UIDS:", payload);
-                break;
-            case 15:
-                console.log("Outgoing PACKET_UDP_FRAGMENT:", payload);
-                break;
-            case 16:
-                console.log("Outgoing PACKET_UDP_CONNECT_1300:", payload);
-                break;
-            case 17:
-                console.log("Outgoing PACKET_UDP_CONNECT_500:", payload);
-                break;
-            case -1:
-                console.log("Outgoing PACKET_UDP_RPC:", payload);
-                break;
-            */
         }
 
         if (gameServer.readyState === WebSocket.OPEN) {
@@ -198,8 +215,11 @@ ingameHttpsServer.listen(
     process.env.INGAME_HOST || "localhost",
     () => {
         console.log(
-            `[${process.env.INGAME_SERVER_NAME || "ZRProxy Ingame"
-            }] Ingame is now listening on port ${process.env.INGAME_PORT || "3003"}`
+            `[${
+                process.env.INGAME_SERVER_NAME || "ZRProxy Ingame"
+            }] Ingame is now listening on port ${
+                process.env.INGAME_PORT || "3003"
+            }`
         );
     }
 );
@@ -213,7 +233,11 @@ function handleUpgrade(server) {
         const { pathname, query } = parse(req.url, true);
         console.log(`Upgrade on ${pathname}`, query);
 
-        if (pathname === "/gateway/" && query.EIO === "4" && query.transport === "websocket") {
+        if (
+            pathname === "/gateway/" &&
+            query.EIO === "4" &&
+            query.transport === "websocket"
+        ) {
             proxiedMason.handleUpgrade(req, socket, head, (ws) => {
                 proxiedMason.emit("connection", ws, req);
             });
@@ -243,7 +267,9 @@ proxiedMason.on("connection", (clientSocket) => {
     console.log("Client connected to Mason proxy");
 
     // Connect to the target WebSocket server
-    const originalMason = new WebSocket("wss://mason-ipv4.zombsroyale.io/gateway/?EIO=4&transport=websocket");
+    const originalMason = new WebSocket(
+        "wss://mason-ipv4.zombsroyale.io/gateway/?EIO=4&transport=websocket"
+    );
 
     /*
     const sid = randomBytes(16).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -297,7 +323,10 @@ proxiedMason.on("connection", (clientSocket) => {
             switch (eventName) {
                 case "partyJoinServer":
                     originalGameServer = { ...eventData };
-                    console.log("Original partyJoinServer:", originalGameServer);
+                    console.log(
+                        "Original partyJoinServer:",
+                        originalGameServer
+                    );
                     eventData = Object.assign(eventData, customGameServer);
                     msg = `42["${eventName}", ${JSON.stringify(eventData)}]`;
                     break;
@@ -357,8 +386,11 @@ httpMasonServer.listen(
     process.env.MASON_HOST || "127.0.0.1",
     () => {
         console.log(
-            `[${process.env.MASON_SERVER_NAME || "ZRProxy Mason"
-            }] Mason is now listening on http://${process.env.MASON_HOST || "127.0.0.1"}:${process.env.MASON_PORT || "3002"}`
+            `[${
+                process.env.MASON_SERVER_NAME || "ZRProxy Mason"
+            }] Mason is now listening on http://${
+                process.env.MASON_HOST || "127.0.0.1"
+            }:${process.env.MASON_PORT || "3002"}`
         );
     }
 );
