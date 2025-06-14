@@ -4,7 +4,7 @@ import { createServer as createHttpServer } from "http";
 import { parse } from "url";
 import { randomBytes } from "crypto";
 import { inspect } from "util";
-import { readFileSync, write, writeFileSync } from "fs";
+import { appendFileSync, readFileSync, writeFileSync } from "fs";
 import { WebSocket, WebSocketServer } from "ws";
 import dgram from "dgram";
 import * as dotenv from "dotenv";
@@ -12,6 +12,46 @@ import { Codec, PacketId } from "zombslib";
 
 // Load environment config
 dotenv.config();
+
+let startTime = undefined;
+
+function savePacket(direction, timestamp, payload) {
+    if (startTime === undefined) startTime = timestamp;
+    const relativeTime = timestamp - startTime;
+    const typeByte = direction === "in" ? 0x01 : 0x02;
+    const typeBuffer = Buffer.from([typeByte]);
+    const timeBuffer = Buffer.alloc(8);
+    timeBuffer.writeBigUInt64LE(BigInt(relativeTime));
+    const lengthBuffer = Buffer.alloc(4);
+    lengthBuffer.writeUInt32LE(payload.length);
+    const dataBuffer = Buffer.from(payload);
+    const packetBuffer = Buffer.concat([
+        typeBuffer,
+        timeBuffer,
+        lengthBuffer,
+        dataBuffer,
+    ]);
+    fs.appendFileSync("replay.sav", packetBuffer);
+}
+
+function parseReplay() {
+    const buffer = fs.readFileSync("replay.sav");
+    const packets = [];
+    let offset = 0;
+    while (offset < buffer.length) {
+        const typeByte = buffer.readUInt8(offset);
+        const direction = typeByte === 0x01 ? "in" : "out";
+        offset += 1;
+        const relativeTime = Number(buffer.readBigUInt64LE(offset));
+        offset += 8;
+        const length = buffer.readUInt32LE(offset);
+        offset += 4;
+        const data = buffer.slice(offset, offset + length);
+        offset += length;
+        packets.push({ direction, time: relativeTime, length, data });
+    }
+    return packets;
+}
 
 const customGameServer = {
     ipv4: `${process.env.INGAME_HOST || "127.0.0.1"}:${
@@ -60,6 +100,35 @@ wss.on("connection", (ws) => {
 
         var payload = new Uint8Array(message);
         switch (payload[0]) {
+            case PacketId.EntityUpdate:
+                updates++;
+                // if (updates !== 1) return;
+                // writeFileSync("update-10.txt", payload);
+                // console.log(payload);
+                // const update = codec.decodeEntityUpdate(payload);
+                // console.log("EntityUpdate", update);
+                /*
+                for (const [key, value] of codec.entityList) {
+                    if (key !== codec.enterWorldResponse.uid)
+                        codec.entityList.delete(key);
+                }
+                console.log(codec.entityList);
+                payload = codec.encodeEntityUpdate({
+                    createdEntities: [codec.enterWorldResponse.uid],
+                    tick: update.tick,
+                    deletedEntities: [],
+                });
+                */
+                // payload = codec.encodeEntityUpdate(update);
+                // writeFileSync("update-11.txt", payload);
+                // console.log(payload);
+                break;
+            case PacketId.PlayerCounterUpdate:
+                break;
+            case PacketId.SetWorldDimensions:
+                break;
+            case PacketId.Input:
+                break;
             case PacketId.EnterWorld:
                 console.log("Incoming PACKET_ENTER_WORLD:", payload);
                 codec.enterWorldResponse =
@@ -103,6 +172,9 @@ wss.on("connection", (ws) => {
                 payload = codec.encodeEnterWorldResponse(codec.enterWorldResponse);
                 */
                 break;
+            case PacketId.Ping:
+                console.log("Incoming PACKET_PING:", payload);
+                break;
             case PacketId.Rpc:
                 const decrypedData = codec.cryptRpc(payload);
 
@@ -119,33 +191,28 @@ wss.on("connection", (ws) => {
                     console.log(rpc.name, rpc.data);
                 }
                 break;
-            case PacketId.EntityUpdate:
-                updates++;
-                if (updates !== 1) return;
-                console.log(payload);
-                const update = codec.decodeEntityUpdate(payload);
-                writeFileSync("update-10.txt", payload);
-                // console.log("EntityUpdate", update);
-                /*
-                for (const [key, value] of codec.entityList) {
-                    if (key !== codec.enterWorldResponse.uid)
-                        codec.entityList.delete(key);
-                }
-                console.log(codec.entityList);
-                payload = codec.encodeEntityUpdate({
-                    createdEntities: [codec.enterWorldResponse.uid],
-                    tick: update.tick,
-                    deletedEntities: [],
-                });
-                */
-                payload = codec.encodeEntityUpdate(update);
-                writeFileSync("update-11.txt", payload);
-                console.log(payload);
+            case PacketId.UdpConnect:
+                break;
+            case PacketId.UdpTick:
+                break;
+            case PacketId.UdpAckTick:
+                break;
+            case PacketId.UdpPong:
+                break;
+            case PacketId.UdpPingWithCompressedUids:
+                break;
+            case PacketId.UdpFragment:
+                break;
+            case PacketId.UdpConnect1300:
+                break;
+            case PacketId.UdpConnect500:
+                break;
+            case PacketId.UdpRpc:
                 break;
         }
 
         if (ws.readyState === WebSocket.OPEN) {
-            if (payload[0] === PacketId.EntityUpdate && updates !== 1) return;
+            // if (payload[0] === PacketId.EntityUpdate && updates !== 1) return;
             ws.send(payload);
         }
     });
@@ -160,6 +227,14 @@ wss.on("connection", (ws) => {
             message.byteLength
         );
         switch (payload[0]) {
+            case PacketId.EntityUpdate:
+                break;
+            case PacketId.PlayerCounterUpdate:
+                break;
+            case PacketId.SetWorldDimensions:
+                break;
+            case PacketId.Input:
+                break;
             case PacketId.EnterWorld:
                 console.log("Outgoing PACKET_ENTER_WORLD:", payload);
                 const enterWorldRequest =
@@ -189,6 +264,24 @@ wss.on("connection", (ws) => {
                     if (rpc.name !== "InputRpc")
                         console.log(rpc.name, rpc.data);
                 }
+                break;
+            case PacketId.UdpConnect:
+                break;
+            case PacketId.UdpTick:
+                break;
+            case PacketId.UdpAckTick:
+                break;
+            case PacketId.UdpPong:
+                break;
+            case PacketId.UdpPingWithCompressedUids:
+                break;
+            case PacketId.UdpFragment:
+                break;
+            case PacketId.UdpConnect1300:
+                break;
+            case PacketId.UdpConnect500:
+                break;
+            case PacketId.UdpRpc:
                 break;
         }
 
