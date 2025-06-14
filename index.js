@@ -102,10 +102,10 @@ wss.on("connection", (ws) => {
         switch (payload[0]) {
             case PacketId.EntityUpdate:
                 updates++;
-                // if (updates !== 1) return;
-                // writeFileSync("update-10.txt", payload);
+                // if (updates !== 1) break;
+                writeFileSync("update.bin", payload);
+                const update = codec.decodeEntityUpdate(payload);
                 // console.log(payload);
-                // const update = codec.decodeEntityUpdate(payload);
                 // console.log("EntityUpdate", update);
                 /*
                 for (const [key, value] of codec.entityList) {
@@ -120,7 +120,7 @@ wss.on("connection", (ws) => {
                 });
                 */
                 // payload = codec.encodeEntityUpdate(update);
-                // writeFileSync("update-11.txt", payload);
+                // writeFileSync("update-custom.bin", payload);
                 // console.log(payload);
                 break;
             case PacketId.PlayerCounterUpdate:
