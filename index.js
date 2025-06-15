@@ -101,12 +101,15 @@ wss.on("connection", (ws) => {
         var payload = new Uint8Array(message);
         switch (payload[0]) {
             case PacketId.EntityUpdate:
-                updates++;
-                // if (updates !== 1) break;
-                writeFileSync("update.bin", payload);
                 const update = codec.decodeEntityUpdate(payload);
-                // console.log(payload);
-                // console.log("EntityUpdate", update);
+                const player = codec.entityList.get(codec.enterWorldResponse.uid);
+                if (!player) break;
+                console.log(player.tick.firingTick, player.tick.firingSequence);
+                updates++;
+                if (updates !== 1) break;
+                writeFileSync("update.bin", payload);
+                console.log(payload);
+                console.log("EntityUpdate", update);
                 /*
                 for (const [key, value] of codec.entityList) {
                     if (key !== codec.enterWorldResponse.uid)
@@ -239,6 +242,17 @@ wss.on("connection", (ws) => {
                 console.log("Outgoing PACKET_ENTER_WORLD:", payload);
                 const enterWorldRequest =
                     codec.decodeEnterWorldRequest(payload);
+                const powResult = codec.validateProofOfWork(
+                    enterWorldRequest.proofOfWork,
+                    originalGameServer.endpoint
+                );
+                if (!powResult.valid) {
+                    ws.close();
+                    return;
+                }
+                const platform = powResult.platform;
+                console.log(platform);
+                codec = new Codec(`../../rpcs/${platform}-Rpcs.json`);
                 codec.computeRpcKey(
                     enterWorldRequest.version,
                     new TextEncoder().encode("/" + originalGameServer.endpoint),
@@ -261,8 +275,7 @@ wss.on("connection", (ws) => {
                 const rpc = codec.decodeRpc(definition, decrypedData);
 
                 if (rpc !== undefined && rpc.name !== null) {
-                    if (rpc.name !== "InputRpc")
-                        console.log(rpc.name, rpc.data);
+                    if (rpc.name !== "InputRpc") console.log(rpc.name, rpc.data);
                 }
                 break;
             case PacketId.UdpConnect:
@@ -305,7 +318,7 @@ wss.on("connection", (ws) => {
 // Start the server
 ingameHttpsServer.listen(
     parseInt(process.env.INGAME_PORT || "3003"),
-    process.env.INGAME_HOST || "localhost",
+    process.env.INGAME_HOST || "127.0.0.1",
     () => {
         console.log(
             `[${
@@ -325,6 +338,7 @@ function handleUpgrade(server) {
     server.on("upgrade", (req, socket, head) => {
         const { pathname, query } = parse(req.url, true);
         console.log(`Upgrade on ${pathname}`, query);
+        console.log(req.url);
 
         if (
             pathname === "/gateway/" &&
