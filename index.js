@@ -12,6 +12,7 @@ import { Codec, PacketId } from "zombslib";
 
 // Load environment config
 dotenv.config();
+const UDP = false;
 
 let startTime = undefined;
 
@@ -102,9 +103,9 @@ wss.on("connection", (ws) => {
         switch (payload[0]) {
             case PacketId.EntityUpdate:
                 const update = codec.decodeEntityUpdate(payload);
-                const player = codec.entityList.get(codec.enterWorldResponse.uid);
-                if (!player) break;
-                console.log(player.tick.firingTick, player.tick.firingSequence);
+                // const player = codec.entityList.get(codec.enterWorldResponse.uid);
+                // if (!player) break;
+                // console.log(player.tick.firingTick, player.tick.firingSequence);
                 updates++;
                 if (updates !== 1) break;
                 writeFileSync("update.bin", payload);
@@ -122,9 +123,9 @@ wss.on("connection", (ws) => {
                     deletedEntities: [],
                 });
                 */
-                // payload = codec.encodeEntityUpdate(update);
-                // writeFileSync("update-custom.bin", payload);
-                // console.log(payload);
+                payload = codec.encodeEntityUpdate(update);
+                writeFileSync("update-reencoded.bin", payload);
+                console.log(payload);
                 break;
             case PacketId.PlayerCounterUpdate:
                 break;
@@ -141,8 +142,7 @@ wss.on("connection", (ws) => {
                     JSON.stringify(codec.enterWorldResponse, null, 2)
                 );
 
-                // Configuration
-                /*
+                if (!UDP) break;
                 const LOCAL_PORT = 1337;
                 const REMOTE_HOST = originalGameServer.ipv4;
                 const REMOTE_PORT = codec.enterWorldResponse.udpPort;
@@ -173,7 +173,6 @@ wss.on("connection", (ws) => {
 
                 codec.enterWorldResponse.udpPort = LOCAL_PORT;
                 payload = codec.encodeEnterWorldResponse(codec.enterWorldResponse);
-                */
                 break;
             case PacketId.Ping:
                 console.log("Incoming PACKET_PING:", payload);
