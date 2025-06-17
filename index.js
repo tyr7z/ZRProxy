@@ -82,6 +82,7 @@ wss.on("connection", (ws) => {
 
     let codec = new Codec("../../rpcs/Windows-Rpcs.json");
     let updates = 0;
+    let lastUpdateTime;
 
     console.log(
         `wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`
@@ -103,29 +104,26 @@ wss.on("connection", (ws) => {
         switch (payload[0]) {
             case PacketId.EntityUpdate:
                 const update = codec.decodeEntityUpdate(payload);
-                // const player = codec.entityList.get(codec.enterWorldResponse.uid);
-                // if (!player) break;
-                // console.log(player.tick.firingTick, player.tick.firingSequence);
                 updates++;
+                const player = codec.entityList.get(codec.enterWorldResponse.uid);
+                if (!player) break;
+                // console.log(player.currentTick.Position);
+                /*
+                console.log(`Update #${updates}`);
+                const now = Date.now();
+                if (lastUpdateTime !== undefined) {
+                    const delta = now - lastUpdateTime;
+                    console.log(`Time since last update: ${delta} ms`);
+                }
+                lastUpdateTime = now;
+                */
                 if (updates !== 1) break;
                 writeFileSync("update.bin", payload);
-                console.log(payload);
-                console.log("EntityUpdate", update);
-                /*
-                for (const [key, value] of codec.entityList) {
-                    if (key !== codec.enterWorldResponse.uid)
-                        codec.entityList.delete(key);
-                }
-                console.log(codec.entityList);
-                payload = codec.encodeEntityUpdate({
-                    createdEntities: [codec.enterWorldResponse.uid],
-                    tick: update.tick,
-                    deletedEntities: [],
-                });
-                */
-                payload = codec.encodeEntityUpdate(update);
-                writeFileSync("update-reencoded.bin", payload);
-                console.log(payload);
+                // console.log(payload);
+                // console.log("EntityUpdate", update);
+                // payload = codec.encodeEntityUpdate(update);
+                // writeFileSync("update-reencoded.bin", payload);
+                // console.log(payload);
                 break;
             case PacketId.PlayerCounterUpdate:
                 break;
@@ -152,17 +150,34 @@ wss.on("connection", (ws) => {
 
                 proxySocket.on("message", (msg, rinfo) => {
                     const sender = `${rinfo.address}:${rinfo.port}`;
-                    const hexString = msg.toString("hex").match(/.{1,2}/g)?.map(byte => byte.toUpperCase()).join(" ");
+                    const hexString = msg
+                        .toString("hex")
+                        .match(/.{1,2}/g)
+                        ?.map((byte) => byte.toUpperCase())
+                        .join(" ");
 
-                    if (rinfo.address === REMOTE_HOST && rinfo.port === REMOTE_PORT) {
+                    if (
+                        rinfo.address === REMOTE_HOST &&
+                        rinfo.port === REMOTE_PORT
+                    ) {
                         // Message from server -> client
                         if (!clientInfo) return;
-                        console.log(`Server ${sender} -> Client ${clientInfo.address}:${clientInfo.port}:`, hexString);
-                        proxySocket.send(msg, clientInfo.port, clientInfo.address);
+                        console.log(
+                            `Server ${sender} -> Client ${clientInfo.address}:${clientInfo.port}:`,
+                            hexString
+                        );
+                        proxySocket.send(
+                            msg,
+                            clientInfo.port,
+                            clientInfo.address
+                        );
                     } else {
                         // Message from client -> server
                         clientInfo = rinfo;
-                        console.log(`Client ${sender} -> Server ${REMOTE_HOST}:${REMOTE_PORT}:`, hexString);
+                        console.log(
+                            `Client ${sender} -> Server ${REMOTE_HOST}:${REMOTE_PORT}:`,
+                            hexString
+                        );
                         proxySocket.send(msg, REMOTE_PORT, REMOTE_HOST);
                     }
                 });
@@ -172,7 +187,9 @@ wss.on("connection", (ws) => {
                 });
 
                 codec.enterWorldResponse.udpPort = LOCAL_PORT;
-                payload = codec.encodeEnterWorldResponse(codec.enterWorldResponse);
+                payload = codec.encodeEnterWorldResponse(
+                    codec.enterWorldResponse
+                );
                 break;
             case PacketId.Ping:
                 console.log("Incoming PACKET_PING:", payload);
@@ -274,7 +291,8 @@ wss.on("connection", (ws) => {
                 const rpc = codec.decodeRpc(definition, decrypedData);
 
                 if (rpc !== undefined && rpc.name !== null) {
-                    if (rpc.name !== "InputRpc") console.log(rpc.name, rpc.data);
+                    if (rpc.name !== "InputRpc")
+                        console.log(rpc.name, rpc.data);
                 }
                 break;
             case PacketId.UdpConnect:
