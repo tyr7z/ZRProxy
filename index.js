@@ -81,8 +81,6 @@ wss.on("connection", (ws) => {
     console.log("Client connected to ingame");
 
     let codec = new Codec("../../rpcs/Windows-Rpcs.json");
-    let updates = 0;
-    let lastUpdateTime;
 
     console.log(
         `wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`
@@ -104,26 +102,9 @@ wss.on("connection", (ws) => {
         switch (payload[0]) {
             case PacketId.EntityUpdate:
                 const update = codec.decodeEntityUpdate(payload);
-                updates++;
-                const player = codec.entityList.get(codec.enterWorldResponse.uid);
-                if (!player) break;
-                // console.log(player.currentTick.Position);
-                /*
-                console.log(`Update #${updates}`);
-                const now = Date.now();
-                if (lastUpdateTime !== undefined) {
-                    const delta = now - lastUpdateTime;
-                    console.log(`Time since last update: ${delta} ms`);
-                }
-                lastUpdateTime = now;
-                */
-                if (updates !== 1) break;
-                writeFileSync("update.bin", payload);
-                // console.log(payload);
-                // console.log("EntityUpdate", update);
-                // payload = codec.encodeEntityUpdate(update);
-                // writeFileSync("update-reencoded.bin", payload);
-                // console.log(payload);
+                console.log(update);
+                // const player = codec.entityList.get(codec.enterWorldResponse.uid);
+                // if (!player) break;
                 break;
             case PacketId.PlayerCounterUpdate:
                 break;
@@ -231,7 +212,6 @@ wss.on("connection", (ws) => {
         }
 
         if (ws.readyState === WebSocket.OPEN) {
-            // if (payload[0] === PacketId.EntityUpdate && updates !== 1) return;
             ws.send(payload);
         }
     });
