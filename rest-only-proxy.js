@@ -1,6 +1,6 @@
-const http = require("http");
-const https = require("https");
-const { URL } = require("url");
+import http from "http";
+import https from "https";
+import { URL } from "url";
 
 const PORT = 3001;
 
