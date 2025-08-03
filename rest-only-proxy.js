@@ -15,8 +15,8 @@ const proxy = http.createServer((clientReq, clientRes) => {
         method: clientReq.method,
         headers: {
             ...clientReq.headers,
-            host: urlObj.hostname
-        }
+            host: urlObj.hostname,
+        },
     };
 
     console.log(`→ ${clientReq.method} ${clientReq.url}`);

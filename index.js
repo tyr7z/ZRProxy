@@ -14,57 +14,11 @@ import { Codec, PacketId } from "zombslib";
 dotenv.config();
 const UDP = false;
 
-let startTime = undefined;
-
-function savePacket(direction, timestamp, payload) {
-    if (startTime === undefined) startTime = timestamp;
-    const relativeTime = timestamp - startTime;
-    const typeByte = direction === "in" ? 0x01 : 0x02;
-    const typeBuffer = Buffer.from([typeByte]);
-    const timeBuffer = Buffer.alloc(8);
-    timeBuffer.writeBigUInt64LE(BigInt(relativeTime));
-    const lengthBuffer = Buffer.alloc(4);
-    lengthBuffer.writeUInt32LE(payload.length);
-    const dataBuffer = Buffer.from(payload);
-    const packetBuffer = Buffer.concat([
-        typeBuffer,
-        timeBuffer,
-        lengthBuffer,
-        dataBuffer,
-    ]);
-    fs.appendFileSync("replay.sav", packetBuffer);
-}
-
-function parseReplay() {
-    const buffer = fs.readFileSync("replay.sav");
-    const packets = [];
-    let offset = 0;
-    while (offset < buffer.length) {
-        const typeByte = buffer.readUInt8(offset);
-        const direction = typeByte === 0x01 ? "in" : "out";
-        offset += 1;
-        const relativeTime = Number(buffer.readBigUInt64LE(offset));
-        offset += 8;
-        const length = buffer.readUInt32LE(offset);
-        offset += 4;
-        const data = buffer.slice(offset, offset + length);
-        offset += length;
-        packets.push({ direction, time: relativeTime, length, data });
-    }
-    return packets;
-}
-
 const customGameServer = {
-    ipv4: `${process.env.INGAME_HOST || "127.0.0.1"}:${
-        process.env.INGAME_PORT || "3003"
-    }`,
+    ipv4: `${process.env.INGAME_HOST || "127.0.0.1"}:${process.env.INGAME_PORT || "3003"}`,
     ipv6: "[::1]:3003",
-    hostname: `${process.env.INGAME_HOST || "127.0.0.1"}:${
-        process.env.INGAME_PORT || "3003"
-    }`,
-    hostnameV4: `${process.env.INGAME_HOST || "127.0.0.1"}:${
-        process.env.INGAME_PORT || "3003"
-    }`,
+    hostname: `${process.env.INGAME_HOST || "127.0.0.1"}:${process.env.INGAME_PORT || "3003"}`,
+    hostnameV4: `${process.env.INGAME_HOST || "127.0.0.1"}:${process.env.INGAME_PORT || "3003"}`,
     endpoints: null,
     hostnames: null,
     hostnamesV4: null,
@@ -82,12 +36,8 @@ wss.on("connection", (ws) => {
 
     let codec = new Codec("../../rpcs/Windows-Rpcs.json");
 
-    console.log(
-        `wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`
-    );
-    let gameServer = new WebSocket(
-        `wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`
-    );
+    console.log(`wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`);
+    let gameServer = new WebSocket(`wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`);
     gameServer.binaryType = "arraybuffer";
     gameServer.on("open", () => {
         console.log("Game server connected");
@@ -102,7 +52,7 @@ wss.on("connection", (ws) => {
         switch (payload[0]) {
             case PacketId.EntityUpdate:
                 const update = codec.decodeEntityUpdate(payload);
-                console.log(update);
+                // console.log(update);
                 // const player = codec.entityList.get(codec.enterWorldResponse.uid);
                 // if (!player) break;
                 break;
@@ -114,12 +64,8 @@ wss.on("connection", (ws) => {
                 break;
             case PacketId.EnterWorld:
                 console.log("Incoming PACKET_ENTER_WORLD:", payload);
-                codec.enterWorldResponse =
-                    codec.decodeEnterWorldResponse(payload);
-                writeFileSync(
-                    "enterWorldResponse.json",
-                    JSON.stringify(codec.enterWorldResponse, null, 2)
-                );
+                codec.enterWorldResponse = codec.decodeEnterWorldResponse(payload);
+                writeFileSync("enterWorldResponse.json", JSON.stringify(codec.enterWorldResponse, null, 2));
 
                 if (!UDP) break;
                 const LOCAL_PORT = 1337;
@@ -137,28 +83,15 @@ wss.on("connection", (ws) => {
                         ?.map((byte) => byte.toUpperCase())
                         .join(" ");
 
-                    if (
-                        rinfo.address === REMOTE_HOST &&
-                        rinfo.port === REMOTE_PORT
-                    ) {
+                    if (rinfo.address === REMOTE_HOST && rinfo.port === REMOTE_PORT) {
                         // Message from server -> client
                         if (!clientInfo) return;
-                        console.log(
-                            `Server ${sender} -> Client ${clientInfo.address}:${clientInfo.port}:`,
-                            hexString
-                        );
-                        proxySocket.send(
-                            msg,
-                            clientInfo.port,
-                            clientInfo.address
-                        );
+                        console.log(`Server ${sender} -> Client ${clientInfo.address}:${clientInfo.port}:`, hexString);
+                        proxySocket.send(msg, clientInfo.port, clientInfo.address);
                     } else {
                         // Message from client -> server
                         clientInfo = rinfo;
-                        console.log(
-                            `Client ${sender} -> Server ${REMOTE_HOST}:${REMOTE_PORT}:`,
-                            hexString
-                        );
+                        console.log(`Client ${sender} -> Server ${REMOTE_HOST}:${REMOTE_PORT}:`, hexString);
                         proxySocket.send(msg, REMOTE_PORT, REMOTE_HOST);
                     }
                 });
@@ -168,9 +101,7 @@ wss.on("connection", (ws) => {
                 });
 
                 codec.enterWorldResponse.udpPort = LOCAL_PORT;
-                payload = codec.encodeEnterWorldResponse(
-                    codec.enterWorldResponse
-                );
+                payload = codec.encodeEnterWorldResponse(codec.enterWorldResponse);
                 break;
             case PacketId.Ping:
                 console.log("Incoming PACKET_PING:", payload);
@@ -181,9 +112,7 @@ wss.on("connection", (ws) => {
                 // const hexString = Array.from(decrypedData).map(byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(' ');
                 // console.log("Incoming decrypted PACKET_RPC:", hexString);
 
-                const definition = codec.enterWorldResponse.rpcs.find(
-                    (rpc) => rpc.index === decrypedData[1]
-                );
+                const definition = codec.enterWorldResponse.rpcs.find((rpc) => rpc.index === decrypedData[1]);
 
                 const rpc = codec.decodeRpc(definition, decrypedData);
 
@@ -220,11 +149,7 @@ wss.on("connection", (ws) => {
     ws.on("message", (message) => {
         // console.log("Client to server:", message);
 
-        var payload = new Uint8Array(
-            message,
-            message.byteOffset,
-            message.byteLength
-        );
+        var payload = new Uint8Array(message, message.byteOffset, message.byteLength);
         switch (payload[0]) {
             case PacketId.EntityUpdate:
                 break;
@@ -236,19 +161,16 @@ wss.on("connection", (ws) => {
                 break;
             case PacketId.EnterWorld:
                 console.log("Outgoing PACKET_ENTER_WORLD:", payload);
-                const enterWorldRequest =
-                    codec.decodeEnterWorldRequest(payload);
-                const powResult = codec.validateProofOfWork(
-                    enterWorldRequest.proofOfWork,
-                    originalGameServer.endpoint
-                );
+                const enterWorldRequest = codec.decodeEnterWorldRequest(payload);
+                const powResult = codec.validateProofOfWork(enterWorldRequest.proofOfWork, originalGameServer.endpoint);
                 if (!powResult.valid) {
                     ws.close();
                     return;
                 }
                 const platform = powResult.platform;
                 console.log(platform);
-                codec = new Codec(`../../rpcs/${platform}-Rpcs.json`);
+                const rpcMapping = JSON.parse(readFileSync(`./rpcs/${platform}-Rpcs.json`), { encoding: "utf-8" });
+                codec = new Codec(rpcMapping);
                 codec.computeRpcKey(
                     enterWorldRequest.version,
                     new TextEncoder().encode("/" + originalGameServer.endpoint),
@@ -264,15 +186,12 @@ wss.on("connection", (ws) => {
                 // const hexString = Array.from(decrypedData).map(byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(' ');
                 // console.log("Outgoing decrypted PACKET_RPC:", hexString);
 
-                const definition = codec.enterWorldResponse.rpcs.find(
-                    (rpc) => rpc.index === decrypedData[1]
-                );
+                const definition = codec.enterWorldResponse.rpcs.find((rpc) => rpc.index === decrypedData[1]);
 
                 const rpc = codec.decodeRpc(definition, decrypedData);
 
                 if (rpc !== undefined && rpc.name !== null) {
-                    if (rpc.name !== "InputRpc")
-                        console.log(rpc.name, rpc.data);
+                    if (rpc.name !== "InputRpc") console.log(rpc.name, rpc.data);
                 }
                 break;
             case PacketId.UdpConnect:
@@ -313,19 +232,11 @@ wss.on("connection", (ws) => {
 });
 
 // Start the server
-ingameHttpsServer.listen(
-    parseInt(process.env.INGAME_PORT || "3003"),
-    process.env.INGAME_HOST || "127.0.0.1",
-    () => {
-        console.log(
-            `[${
-                process.env.INGAME_SERVER_NAME || "ZRProxy Ingame"
-            }] Ingame is now listening on port ${
-                process.env.INGAME_PORT || "3003"
-            }`
-        );
-    }
-);
+ingameHttpsServer.listen(parseInt(process.env.INGAME_PORT || "3003"), process.env.INGAME_HOST || "127.0.0.1", () => {
+    console.log(
+        `[${process.env.INGAME_SERVER_NAME || "ZRProxy Ingame"}] Ingame is now listening on port ${process.env.INGAME_PORT || "3003"}`
+    );
+});
 
 // Shared proxied Mason server
 const proxiedMason = new WebSocketServer({ noServer: true });
@@ -337,11 +248,7 @@ function handleUpgrade(server) {
         console.log(`Upgrade on ${pathname}`, query);
         console.log(req.url);
 
-        if (
-            pathname === "/gateway/" &&
-            query.EIO === "4" &&
-            query.transport === "websocket"
-        ) {
+        if (pathname === "/gateway/" && query.EIO === "4" && query.transport === "websocket") {
             proxiedMason.handleUpgrade(req, socket, head, (ws) => {
                 proxiedMason.emit("connection", ws, req);
             });
@@ -371,9 +278,7 @@ proxiedMason.on("connection", (clientSocket) => {
     console.log("Client connected to Mason proxy");
 
     // Connect to the target WebSocket server
-    const originalMason = new WebSocket(
-        "wss://mason-ipv4.zombsroyale.io/gateway/?EIO=4&transport=websocket"
-    );
+    const originalMason = new WebSocket("wss://mason-ipv4.zombsroyale.io/gateway/?EIO=4&transport=websocket");
 
     /*
     const sid = randomBytes(16).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -427,10 +332,7 @@ proxiedMason.on("connection", (clientSocket) => {
             switch (eventName) {
                 case "partyJoinServer":
                     originalGameServer = { ...eventData };
-                    console.log(
-                        "Original partyJoinServer:",
-                        originalGameServer
-                    );
+                    console.log("Original partyJoinServer:", originalGameServer);
                     eventData = Object.assign(eventData, customGameServer);
                     msg = `42["${eventName}", ${JSON.stringify(eventData)}]`;
                     break;
@@ -485,16 +387,10 @@ httpsMasonServer.listen(
 // 🌐 HTTP Mason server
 const httpMasonServer = createHttpServer();
 handleUpgrade(httpMasonServer);
-httpMasonServer.listen(
-    parseInt(process.env.MASON_PORT || "3002"),
-    process.env.MASON_HOST || "127.0.0.1",
-    () => {
-        console.log(
-            `[${
-                process.env.MASON_SERVER_NAME || "ZRProxy Mason"
-            }] Mason is now listening on http://${
-                process.env.MASON_HOST || "127.0.0.1"
-            }:${process.env.MASON_PORT || "3002"}`
-        );
-    }
-);
+httpMasonServer.listen(parseInt(process.env.MASON_PORT || "3002"), process.env.MASON_HOST || "127.0.0.1", () => {
+    console.log(
+        `[${process.env.MASON_SERVER_NAME || "ZRProxy Mason"}] Mason is now listening on http://${process.env.MASON_HOST || "127.0.0.1"}:${
+            process.env.MASON_PORT || "3002"
+        }`
+    );
+});
