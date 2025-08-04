@@ -34,7 +34,7 @@ const wss = new WebSocketServer({ server: ingameHttpsServer });
 wss.on("connection", (ws) => {
     console.log("Client connected to ingame");
 
-    let codec = new Codec("../../rpcs/Windows-Rpcs.json");
+    let codec = new Codec(JSON.parse(readFileSync(`./rpcs/Windows-Rpcs.json`), { encoding: "utf-8" }));
 
     console.log(`wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`);
     let gameServer = new WebSocket(`wss://${originalGameServer.hostnameV4}/${originalGameServer.endpoint}`);
