@@ -107,7 +107,7 @@ wss.on("connection", (ws) => {
                 console.log("Incoming PACKET_PING:", payload);
                 break;
             case PacketId.Rpc:
-                const decrypedData = codec.cryptRpc(payload);
+                const decrypedData = codec.crypto.cryptRpc(payload);
 
                 // const hexString = Array.from(decrypedData).map(byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(' ');
                 // console.log("Incoming decrypted PACKET_RPC:", hexString);
@@ -162,7 +162,7 @@ wss.on("connection", (ws) => {
             case PacketId.EnterWorld:
                 console.log("Outgoing PACKET_ENTER_WORLD:", payload);
                 const enterWorldRequest = codec.decodeEnterWorldRequest(payload);
-                const powResult = codec.validateProofOfWork(enterWorldRequest.proofOfWork, originalGameServer.endpoint);
+                const powResult = codec.crypto.validateProofOfWork(enterWorldRequest.proofOfWork, originalGameServer.endpoint);
                 if (!powResult.valid) {
                     ws.close();
                     return;
@@ -171,7 +171,7 @@ wss.on("connection", (ws) => {
                 console.log(platform);
                 const rpcMapping = JSON.parse(readFileSync(`./rpcs/${platform}-Rpcs.json`), { encoding: "utf-8" });
                 codec = new Codec(rpcMapping);
-                codec.computeRpcKey(
+                codec.crypto.computeRpcKey(
                     enterWorldRequest.version,
                     new TextEncoder().encode("/" + originalGameServer.endpoint),
                     enterWorldRequest.proofOfWork
@@ -181,7 +181,7 @@ wss.on("connection", (ws) => {
                 console.log("Outgoing PACKET_PING:", payload);
                 break;
             case PacketId.Rpc:
-                const decrypedData = codec.cryptRpc(payload);
+                const decrypedData = codec.crypto.cryptRpc(payload);
 
                 // const hexString = Array.from(decrypedData).map(byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(' ');
                 // console.log("Outgoing decrypted PACKET_RPC:", hexString);
