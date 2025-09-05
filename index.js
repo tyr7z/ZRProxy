@@ -191,8 +191,7 @@ wss.on("connection", (ws) => {
                 const rpc = codec.decodeRpc(definition, decrypedData);
 
                 if (rpc !== undefined && rpc.name !== null) {
-                    // if (rpc.name !== "InputRpc") console.log(rpc.name, rpc.data);
-                    if (rpc.name === "SetSkinRpc") console.log(rpc.name, rpc.data);
+                    if (rpc.name !== "InputRpc") console.log(rpc.name, rpc.data);
                 }
                 break;
             case PacketId.UdpConnect:
