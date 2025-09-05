@@ -68,11 +68,11 @@ wss.on("connection", (ws) => {
                 writeFileSync("enterWorldResponse.json", JSON.stringify(codec.enterWorldResponse, null, 2));
 
                 if (!UDP) break;
-                const LOCAL_PORT = 1337;
                 const REMOTE_HOST = originalGameServer.ipv4;
                 const REMOTE_PORT = codec.enterWorldResponse.udpPort;
-                let clientInfo = null;
+                const LOCAL_PORT = 1337;
 
+                let clientInfo = null;
                 const proxySocket = dgram.createSocket("udp4");
 
                 proxySocket.on("message", (msg, rinfo) => {
@@ -129,6 +129,15 @@ wss.on("connection", (ws) => {
                         // console.log(`[>>>] Client ${sender} -> Server ${REMOTE_HOST}:${REMOTE_PORT}:`, hexString);
                         console.log(`[>>>] Outgoing UDP ${packetType}:`, hexString);
                         proxySocket.send(msg, REMOTE_PORT, REMOTE_HOST);
+                    }
+
+                    if (msg[0] === PacketId.Rpc) {
+                        const rpcData = new Uint8Array([msg[0], ...msg.subarray(5)]);
+                        const definition = codec.enterWorldResponse.rpcs.find((rpc) => rpc.index === rpcData[1]);
+                        const rpc = codec.decodeRpc(definition, rpcData);
+                        if (rpc !== undefined && rpc.name !== null) {
+                            console.log(rpc.name, rpc.data);
+                        }
                     }
                 });
 
