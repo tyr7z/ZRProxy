@@ -12,7 +12,7 @@ import { Codec, PacketId } from "zombslib";
 
 // Load environment config
 dotenv.config();
-const UDP = false;
+const UDP = true;
 
 const customGameServer = {
     ipv4: `${process.env.INGAME_HOST || "127.0.0.1"}:${process.env.INGAME_PORT || "3003"}`,
@@ -83,15 +83,51 @@ wss.on("connection", (ws) => {
                         ?.map((byte) => byte.toUpperCase())
                         .join(" ");
 
+                    let packetType = "Unknown";
+                    switch (msg[0]) {
+                        case PacketId.Rpc:
+                            packetType = "Rpc";
+                            break;
+                        case PacketId.UdpConnect:
+                            packetType = "UdpConnect";
+                            break;
+                        case PacketId.UdpTick:
+                            packetType = "UdpTick";
+                            break;
+                        case PacketId.UdpAckTick:
+                            packetType = "UdpAckTick";
+                            break;
+                        case PacketId.UdpPong:
+                            packetType = "UdpPong";
+                            break;
+                        case PacketId.UdpPingWithCompressedUids:
+                            packetType = "UdpPingWithCompressedUids";
+                            break;
+                        case PacketId.UdpFragment:
+                            packetType = "UdpFragment";
+                            break;
+                        case PacketId.UdpConnect1300:
+                            packetType = "UdpConnect1300";
+                            break;
+                        case PacketId.UdpConnect500:
+                            packetType = "UdpConnect500";
+                            break;
+                        case PacketId.UdpRpc:
+                            packetType = "UdpRpc";
+                            break;
+                    }
+
                     if (rinfo.address === REMOTE_HOST && rinfo.port === REMOTE_PORT) {
                         // Message from server -> client
                         if (!clientInfo) return;
-                        console.log(`Server ${sender} -> Client ${clientInfo.address}:${clientInfo.port}:`, hexString);
+                        // console.log(`[<<<] Server ${sender} -> Client ${clientInfo.address}:${clientInfo.port}:`, hexString);
+                        console.log(`[<<<] Incoming UDP ${packetType}:`, hexString);
                         proxySocket.send(msg, clientInfo.port, clientInfo.address);
                     } else {
                         // Message from client -> server
                         clientInfo = rinfo;
-                        console.log(`Client ${sender} -> Server ${REMOTE_HOST}:${REMOTE_PORT}:`, hexString);
+                        // console.log(`[>>>] Client ${sender} -> Server ${REMOTE_HOST}:${REMOTE_PORT}:`, hexString);
+                        console.log(`[>>>] Outgoing UDP ${packetType}:`, hexString);
                         proxySocket.send(msg, REMOTE_PORT, REMOTE_HOST);
                     }
                 });
@@ -233,9 +269,7 @@ wss.on("connection", (ws) => {
 
 // Start the server
 ingameHttpsServer.listen(parseInt(process.env.INGAME_PORT || "3003"), process.env.INGAME_HOST || "127.0.0.1", () => {
-    console.log(
-        `[${process.env.INGAME_SERVER_NAME || "ZRProxy Ingame"}] Ingame is now listening on port ${process.env.INGAME_PORT || "3003"}`
-    );
+    console.log(`[${process.env.INGAME_SERVER_NAME || "ZRProxy Ingame"}] Ingame is now listening on port ${process.env.INGAME_PORT || "3003"}`);
 });
 
 // Shared proxied Mason server
