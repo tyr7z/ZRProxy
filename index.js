@@ -12,7 +12,7 @@ import { Codec, PacketId } from "zombslib";
 
 // Load environment config
 dotenv.config();
-const UDP = true;
+const UDP = false;
 
 const customGameServer = {
     ipv4: `${process.env.INGAME_HOST || "127.0.0.1"}:${process.env.INGAME_PORT || "3003"}`,
