@@ -12,7 +12,7 @@ import { Codec, PacketId } from "zombslib";
 
 // Load environment config
 dotenv.config();
-const UDP = false;
+const UDP = true;
 
 const customGameServer = {
     ipv4: `${process.env.INGAME_HOST || "127.0.0.1"}:${process.env.INGAME_PORT || "3003"}`,
@@ -65,7 +65,7 @@ wss.on("connection", (ws) => {
             case PacketId.EnterWorld:
                 console.log("Incoming PACKET_ENTER_WORLD:", payload);
                 codec.enterWorldResponse = codec.decodeEnterWorldResponse(payload);
-                writeFileSync("enterWorldResponse.json", JSON.stringify(codec.enterWorldResponse, null, 2));
+                // writeFileSync("enterWorldResponse.json", JSON.stringify(codec.enterWorldResponse, null, 2));
 
                 if (!UDP) break;
                 const REMOTE_HOST = originalGameServer.ipv4;
@@ -136,7 +136,7 @@ wss.on("connection", (ws) => {
                         const definition = codec.enterWorldResponse.rpcs.find((rpc) => rpc.index === rpcData[1]);
                         const rpc = codec.decodeRpc(definition, rpcData);
                         if (rpc !== undefined && rpc.name !== null) {
-                            console.log(rpc.name, rpc.data);
+                            console.log(rpc.name, rpc.data, rpc.tick);
                         }
                     }
                 });
@@ -162,7 +162,7 @@ wss.on("connection", (ws) => {
                 const rpc = codec.decodeRpc(definition, decrypedData);
 
                 if (rpc !== undefined && rpc.name !== null) {
-                    console.log(rpc.name, rpc.data);
+                    console.log(rpc.name, rpc.data, rpc.tick);
                 }
                 break;
             case PacketId.UdpConnect:
@@ -236,7 +236,7 @@ wss.on("connection", (ws) => {
                 const rpc = codec.decodeRpc(definition, decrypedData);
 
                 if (rpc !== undefined && rpc.name !== null) {
-                    if (rpc.name !== "InputRpc") console.log(rpc.name, rpc.data);
+                    if (rpc.name !== "InputRpc") console.log(rpc.name, rpc.data, rpc.tick);
                 }
                 break;
             case PacketId.UdpConnect:
