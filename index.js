@@ -136,7 +136,7 @@ wss.on("connection", (ws) => {
                         const definition = codec.enterWorldResponse.rpcs.find((rpc) => rpc.index === rpcData[1]);
                         const rpc = codec.decodeRpc(definition, rpcData);
                         if (rpc !== undefined && rpc.name !== null) {
-                            console.log(rpc.name, rpc.data, rpc.tick);
+                            console.log(rpc.name, rpc.data, rpc.extra.tick);
                         }
                     }
                 });
@@ -162,7 +162,7 @@ wss.on("connection", (ws) => {
                 const rpc = codec.decodeRpc(definition, decrypedData);
 
                 if (rpc !== undefined && rpc.name !== null) {
-                    console.log(rpc.name, rpc.data, rpc.tick);
+                    console.log(rpc.name, rpc.data, rpc.extra.tick);
                 }
                 break;
             case PacketId.UdpConnect:
@@ -236,7 +236,7 @@ wss.on("connection", (ws) => {
                 const rpc = codec.decodeRpc(definition, decrypedData);
 
                 if (rpc !== undefined && rpc.name !== null) {
-                    if (rpc.name !== "InputRpc") console.log(rpc.name, rpc.data, rpc.tick);
+                    if (rpc.name !== "InputRpc") console.log(rpc.name, rpc.data, rpc.extra.tick);
                 }
                 break;
             case PacketId.UdpConnect:
